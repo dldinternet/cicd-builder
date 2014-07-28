@@ -31,13 +31,13 @@ module CiCd
     # ---------------------------------------------------------------------------------------------------------------
     def prepareBuild()
       meta = {}
-      %w[ WORKSPACE PROJECT_NAME VERSION RELEASE ].each do |e|
+      %w[ WORKSPACE PROJECT_NAME ].each do |e|
         unless ENV.has_key?(e)
           raise "#{e} environment variable is required"
         end
       end
-      meta[:Version] = ENV['VERSION']
-      meta[:Release] = ENV['RELEASE']
+      meta[:Version] = @vars[:version]
+      meta[:Release] = @vars[:release]
 
       place = ''
       begin

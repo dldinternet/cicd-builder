@@ -39,6 +39,18 @@ module CiCd
 
 			if ENV.has_key?('RELEASE')
 				@vars[:release] = ENV['RELEASE']
+      elsif File.exists?((version_file=File.join(ENV['REPO_DIR'], 'RELEASE')))
+        @vars[:release] = File.readlines(version_file).shift
+      else
+        raise "'RELEASE' was not provided in either environment or #{version_file} file"
+			end
+
+			if ENV.has_key?('VERSION')
+				@vars[:version] = ENV['VERSION']
+      elsif File.exists?((version_file=File.join(ENV['REPO_DIR'], 'VERSION')))
+        @vars[:version] = File.readlines(version_file).shift
+      else
+        raise "'VERSION' was not provided in either environment or #{version_file} file"
 			end
 
 			if ENV.has_key?('BUILD_STORE')
