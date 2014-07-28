@@ -55,7 +55,7 @@ module CiCd
 
 			# ---------------------------------------------------------------------------------------------------------------
 			def run()
-				$stdout.write("CiCd::Builder v#{@VERSION}\n")
+				$stdout.write("CiCd::Builder v#{VERSION}\n")
 				parseOptions()
 
 				ret = checkEnvironment()
