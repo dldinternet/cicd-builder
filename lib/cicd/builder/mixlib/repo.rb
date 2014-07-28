@@ -281,7 +281,10 @@ module CiCd
 			end
 			begin
 				resp = s3_obj.write(:data => json_s)
-				case resp.class.name
+
+        @logger.info "Inventory URL: #{s3_obj.public_url}"
+
+        case resp.class.name
 				when %r'^AWS::S3::(S3Object|ObjectVersion)'
 					return 0
 				else
