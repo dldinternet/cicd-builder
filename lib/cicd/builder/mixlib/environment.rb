@@ -91,7 +91,7 @@ module CiCd
     end
 
     # ---------------------------------------------------------------------------------------------------------------
-		def saveEnvironment(ignored=[])
+		def saveEnvironment(ignored=['LS_COLORS','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY'])
 			@logger.info "Save environment to #{@vars[:vars_fil]}"
 			vstr = ['[global]']
 			ENV.to_hash.sort.each{|k,v|
@@ -162,7 +162,7 @@ module CiCd
     end
 
 		# ---------------------------------------------------------------------------------------------------------------
-		def reportStatus(ignored=[])
+		def reportStatus(ignored=['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'])
       # [2013-12-30 Christo] Report status,environment, etc.
 
 			if @logger.level < ::Logging::LEVELS['warn']
