@@ -2,6 +2,8 @@ require 'cicd/builder/version'
 module CiCd
 	module Builder
 
+    ENV_IGNORED = %w(LS_COLORS AWS_ACCESS_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SECRET_KEY)
+
 		require 'awesome_print'
 		require 'optparse'
 		require 'inifile'

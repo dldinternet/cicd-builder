@@ -409,15 +409,15 @@ module CiCd
 			# manifest.delete(:api)
 			# manifest.delete(:core)
 			manifest[:vars] = {}
-			@vars.each { |k, v|
+			@vars.sort.each { |k, v|
 				unless %w(build_mdd build_txt).include?(k.to_s)
 					manifest[:vars][k.to_s] = v
 				end
 			}
 			manifest = downcaseHashKeys(manifest)
 			manifest[:env] = {}
-			ENV.each { |k, v|
-				unless %w(LS_COLORS AWS_ACCESS_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SECRET_KEY).include?(k.to_s)
+			ENV.to_hash.sort.each { |k, v|
+				unless ENV_IGNORED.include?(k.to_s)
 					manifest[:env][k.to_s] = v
 				end
 			}

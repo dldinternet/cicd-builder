@@ -91,7 +91,7 @@ module CiCd
     end
 
     # ---------------------------------------------------------------------------------------------------------------
-		def saveEnvironment(ignored=['LS_COLORS','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY'])
+		def saveEnvironment(ignored=ENV_IGNORED)
 			@logger.info "Save environment to #{@vars[:vars_fil]}"
 			vstr = ['[global]']
 			ENV.to_hash.sort.each{|k,v|
@@ -136,7 +136,7 @@ module CiCd
           end
           @logger.info "Save latest build info to #{@vars[:latest_fil]}"
           IO.write(@vars[:latest_fil], "#{@vars[:build_ver]}\n#{@vars[:build_sha]}")
-          saveEnvironment(['LS_COLORS','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY'])
+          saveEnvironment(ENV_IGNORED)
           # NOTE the '.note'!
           @logger.note "CHANGE: #{ENV['JOB_NAME']} (#{@vars[:build_ver]}[#{@vars[:build_sha]}])"
 
@@ -162,7 +162,7 @@ module CiCd
     end
 
 		# ---------------------------------------------------------------------------------------------------------------
-		def reportStatus(ignored=['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'])
+		def reportStatus(ignored=ENV_IGNORED)
       # [2013-12-30 Christo] Report status,environment, etc.
 
 			if @logger.level < ::Logging::LEVELS['warn']
