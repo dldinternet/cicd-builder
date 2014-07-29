@@ -75,8 +75,15 @@ module CiCd
       @vars[:latest_ver] = ''
       @vars[:latest_sha] = ''
       @vars[:latest_pkg] = ''
+      @vars[:latest_ext] = @vars[:build_ext]
       if @vars[:build_nam]
-        @vars[:latest_pkg]= "#{@vars[:build_store]}/#{@vars[:build_nam]}.tar.gz"
+        @vars[:latest_pkg] = "#{@vars[:build_store]}/#{@vars[:build_nam]}.#{@vars[:latest_ext]}"
+        unless File.exists?(@vars[:latest_pkg])
+          if File.exists?("#{@vars[:build_store]}/#{@vars[:build_nam]}.tar.gz")
+            @vars[:latest_ext] = 'tar.gz'
+            @vars[:latest_pkg] = "#{@vars[:build_store]}/#{@vars[:build_nam]}.#{@vars[:latest_ext]}"
+          end
+        end
       end
       if File.exists?(@vars[:latest_fil])
         @vars[:latest_ver] = IO.readlines(@vars[:latest_fil])

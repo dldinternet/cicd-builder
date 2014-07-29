@@ -50,6 +50,7 @@ module CiCd
 						size = art[:data][:data].length
           end
           art[:data][:metadata] = {checksum: md5}
+          art[:data][:'x-amz-meta-digest'] = "md5=#{md5}"
 					s3_obj.write(art[:data])
 					if art.has_key?(:public_url)
 						@vars[art[:public_url]] = s3_obj.public_url
@@ -242,13 +243,21 @@ module CiCd
 				# Add the new build if we don't have it
 				unless varianth['builds'].map { |b| b['build_name'] }.include?(@vars[:build_rel])
 					#noinspection RubyStringKeysInHashInspection
-					varianth['builds'] <<
-						{
-							'drawer'        => @vars[:build_nam],
-							'build_name'    => @vars[:build_rel],
-              'build_number'  => @vars[:build_num],
-              'release'       => @vars[:release],
-						}
+					filing = {
+                      'drawer'        => @vars[:build_nam],
+                      'build_name'    => @vars[:build_rel],
+                      'build_number'  => @vars[:build_num],
+                      'release'       => @vars[:release],
+                    }
+          assembly = json['container']['assembly'] or raise("Expected an 'assembly'")
+          if assembly['extension'] != !vars[:build_ext]
+            # noinspection RubyStringKeysInHashInspection
+            filing['assembly'] = {
+                'extension' => @vars[:build_ext],
+                'type'      => 'tarbzip2'
+            }
+          end
+          varianth['builds'] << filing
 				end
 				build_lst = (varianth['builds'].size-1)
         build_rel = build_lst
@@ -280,7 +289,12 @@ module CiCd
 				json_s = JSON.pretty_generate( json, { indent: "\t", space: ' '})
 			end
 			begin
-				resp = s3_obj.write(:data => json_s)
+        md5 = Digest::MD5.hexdigest(json_s)
+				resp = s3_obj.write({
+                                :data                 => json_s,
+                                :'x-amz-meta-digest'  => "md5=#{md5}",
+                                :metadata             => { checksum: md5 },
+                            })
 
         @logger.info "Inventory URL: #{s3_obj.url_for(:read)}"
 
@@ -331,9 +345,9 @@ module CiCd
 						artifacts = []
 
 						key    = "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_rel]}"
-						# Store the assembly
+						# Store the assembly - be sure to inherit possible overrides in pkg name and ext but dictate the drawer!
 						artifacts << {
-							key:        "#{key}.tar.gz",
+							key:        "#{File.join(File.dirname(key),File.basename(@vars[:build_pkg]))}",
 							data:       {:file => @vars[:build_pkg]},
 							public_url: :build_url,
 							label:      'Package URL'

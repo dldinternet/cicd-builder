@@ -52,14 +52,15 @@ module CiCd
         place = 'git.current_branch'
         meta[:Branch] = git.current_branch
 
+        @vars[:build_ext] = 'tar.gz'
         @vars[:build_bra] = meta[:Branch].gsub(%r([/|]),'.')
         @vars[:build_ver] = "#{meta[:Version]}"
         @vars[:build_vrb] = "#{@vars[:build_ver]}-release-#{meta[:Release]}-#{@vars[:build_bra]}-#{@vars[:variant]}" #
         @vars[:build_nam] = "#{@vars[:project_name]}-#{@vars[:build_vrb]}"
         @vars[:build_rel] = "#{@vars[:build_nam]}-build-#{@vars[:build_num]}"
         @vars[:build_dir] = "#{ENV['WORKSPACE']}/#{@vars[:build_rel]}"
-        @vars[:latest_pkg]= "#{@vars[:build_store]}/#{@vars[:build_rel]}.tar.gz"
-        @vars[:build_pkg] = "#{@vars[:build_rel]}.tar.gz"
+        @vars[:latest_pkg]= "#{@vars[:build_store]}/#{@vars[:build_rel]}.#{@vars[:build_ext]}"
+        @vars[:build_pkg] = "#{@vars[:build_rel]}.#{@vars[:build_ext]}"
         @vars[:build_chk] = "#{@vars[:build_rel]}.checksum"
         @vars[:build_mff] = "#{@vars[:build_rel]}.manifest"
         @vars[:build_mdf] = "#{@vars[:build_rel]}.meta"
