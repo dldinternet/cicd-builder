@@ -249,6 +249,9 @@ module CiCd
                       'build_number'  => @vars[:build_num],
                       'release'       => @vars[:release],
                     }
+          if @vars.has_key?(:artifacts)
+            filing['artifacts'] = @vars[:artifacts].map { |artifact| File.basename(artifact[:key]) }
+          end
           assembly = json['container']['assembly'] or raise("Expected an 'assembly'")
           if assembly['extension'] != !vars[:build_ext]
             # noinspection RubyStringKeysInHashInspection
@@ -342,7 +345,7 @@ module CiCd
 				begin
 					if File.exists?(@vars[:build_pkg])
 
-						artifacts = []
+						artifacts = @vars[:artifacts] rescue []
 
 						key    = "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_rel]}"
 						# Store the assembly - be sure to inherit possible overrides in pkg name and ext but dictate the drawer!
