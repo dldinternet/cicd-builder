@@ -49,8 +49,8 @@ module CiCd
 					else
 						size = art[:data][:data].length
           end
-          art[:data][:metadata] = {checksum: md5}
-          art[:data][:'x-amz-meta-digest'] = "md5=#{md5}"
+          art[:data][:metadata] = {checksum: md5, digest: "md5=#{md5}"}
+          # art[:data][:'x-amz-meta-digest'] = "md5=#{md5}"
 					s3_obj.write(art[:data])
 					if art.has_key?(:public_url)
 						@vars[art[:public_url]] = s3_obj.public_url
