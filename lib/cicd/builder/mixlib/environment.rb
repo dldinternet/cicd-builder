@@ -40,7 +40,8 @@ module CiCd
 			if ENV.has_key?('RELEASE')
 				@vars[:release] = ENV['RELEASE']
       elsif File.exists?((version_file=File.join(ENV['REPO_DIR'], 'RELEASE')))
-        @vars[:release] = File.readlines(version_file).shift
+        lines = File.readlines(version_file)
+        @vars[:release] = lines.shift.chomp() if lines.count > 0
       else
         raise "'RELEASE' was not provided in either environment or #{version_file} file"
 			end
@@ -48,7 +49,8 @@ module CiCd
 			if ENV.has_key?('VERSION')
 				@vars[:version] = ENV['VERSION']
       elsif File.exists?((version_file=File.join(ENV['REPO_DIR'], 'VERSION')))
-        @vars[:version] = File.readlines(version_file).shift
+        lines = File.readlines(version_file)
+        @vars[:version] = lines.shift.chomp() if lines.count > 0
       else
         raise "'VERSION' was not provided in either environment or #{version_file} file"
 			end
