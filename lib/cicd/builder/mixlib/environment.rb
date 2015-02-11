@@ -6,8 +6,8 @@ module CiCd
 		def checkEnvironment()
 			# [2013-12-30 Christo] Detect CI ...
 			unless ENV.has_key?('JENKINS_HOME')
-				puts 'Sorry, your CI environment is not supported at this time (2013-12-30) ... Christo De Lange'
-				puts 'This script is developed for Jenkins so either you are not using Jenkins or you ran me outside of the CI ecosystem ...'
+				@logger.error "Sorry, your CI environment is not supported at this time (2013-12-30) ... Christo De Lange\n"+
+				'This script is developed for Jenkins so either you are not using Jenkins or you ran me outside of the CI ecosystem ...'
 				return 99
 			end
 
@@ -15,13 +15,15 @@ module CiCd
 			map_keys = {}
 
 			@options[:env_keys].each { |k|
-				map_keys[k]= (not ENV.has_key?(k))
+				map_keys[k]= (not ENV.has_key?(k) or ENV[k].empty?)
 			}
 			missing = map_keys.keys.select{ |k| map_keys[k] }
 
 			if missing.count() > 0
-				ap missing
-				raise Exception.new("Need environment variables: #{missing}")
+				# ap missing
+				#raise Exception.new("Need these environment variables: #{missing}")
+				puts("Need these environment variables: #{missing.ai}")
+        return 1
 			end
 			0
 		end
@@ -134,7 +136,7 @@ module CiCd
         end
 
         if change
-          if @vars[:latest_pkg] != @vars[:build_pkg]
+          if @vars[:latest_pkg] != @vars[:build_pkg] and  File.file?(@vars[:build_pkg])
             @logger.info "Link #{@vars[:latest_pkg]} to #{@vars[:build_pkg]}"
             begin
               File.unlink(@vars[:latest_pkg])
@@ -142,13 +144,14 @@ module CiCd
               # noop
             end
             File.symlink(@vars[:build_pkg], @vars[:latest_pkg])
+          else
+            @logger.warn "Skipping link #{@vars[:latest_pkg]} to missing '#{@vars[:build_pkg]}'"
           end
           @logger.info "Save latest build info to #{@vars[:latest_fil]}"
           IO.write(@vars[:latest_fil], "#{@vars[:build_ver]}\n#{@vars[:build_sha]}")
           saveEnvironment(ENV_IGNORED)
           # NOTE the '.note'!
           @logger.note "CHANGE: #{ENV['JOB_NAME']} (#{@vars[:build_ver]}[#{@vars[:build_sha]}])"
-
         else
           @logger.info "Artifact #{@vars[:latest_pkg]} unchanged (#{@vars[:latest_ver]} [#{@vars[:latest_sha]}])"
           @logger.info "NO_CHANGE: #{ENV['JOB_NAME']} #{@vars[:latest_ver]}"

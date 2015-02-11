@@ -31,48 +31,70 @@ module CiCd
     # ---------------------------------------------------------------------------------------------------------------
     def prepareBuild()
       meta = {}
+      @vars[:return_code] = 0
       %w[ WORKSPACE PROJECT_NAME ].each do |e|
         unless ENV.has_key?(e)
-          raise "#{e} environment variable is required"
+          puts "#{e} environment variable is required"
+          @vars[:return_code] = -99
         end
       end
       meta[:Version] = @vars[:version]
       meta[:Release] = @vars[:release]
 
-      place = ''
-      begin
-        place = 'require "git"'
-        eval place
+      if @vars[:return_code] == 0
 
-        # Assuming we are in the workspace ...
-        place = "Git.open('#{ENV['WORKSPACE']}')"
-        git = Git.open(ENV['WORKSPACE'], :log => @logger)
-        place = 'git.log'
-        meta[:Commit] = git.log[0].sha
-        place = 'git.current_branch'
-        meta[:Branch] = git.current_branch
+        if File.exists?(ENV['WORKSPACE']) and (File.directory?(ENV['WORKSPACE']) or File.symlink?(ENV['WORKSPACE']))
 
-        @vars[:build_ext] = 'tar.gz'
-        @vars[:build_bra] = meta[:Branch].gsub(%r([/|]),'.')
-        @vars[:build_ver] = "#{meta[:Version]}"
-        @vars[:build_vrb] = "#{@vars[:build_ver]}-release-#{meta[:Release]}-#{@vars[:build_bra]}-#{@vars[:variant]}" #
-        @vars[:build_nam] = "#{@vars[:project_name]}-#{@vars[:build_vrb]}"
-        @vars[:build_rel] = "#{@vars[:build_nam]}-build-#{@vars[:build_num]}"
-        @vars[:build_dir] = "#{ENV['WORKSPACE']}/#{@vars[:build_rel]}"
-        @vars[:latest_pkg]= "#{@vars[:build_store]}/#{@vars[:build_rel]}.#{@vars[:build_ext]}"
-        @vars[:build_pkg] = "#{@vars[:build_rel]}.#{@vars[:build_ext]}"
-        @vars[:build_chk] = "#{@vars[:build_rel]}.checksum"
-        @vars[:build_mff] = "#{@vars[:build_rel]}.manifest"
-        @vars[:build_mdf] = "#{@vars[:build_rel]}.meta"
-        @vars[:build_mdd] = meta.dup
-        #noinspection RubyArgCount
-        @vars[:build_mds] = Digest::SHA256.hexdigest(meta.to_s)
+          place = ''
+          begin
+            req = 'require "git"'
+            eval req
 
-        @vars[:return_code] = 0
+            # Assuming we are in the workspace ...
+            place = "Git.open('#{ENV['WORKSPACE']}')"
+            git = Git.open(ENV['WORKSPACE'], :log => @logger)
+            place = 'git.log'
+            meta[:Commit] = git.log[0].sha
+            place = 'git.current_branch'
+            meta[:Branch] = git.current_branch
 
-      rescue Exception => e
-        @logger.error "#{e.class}:: '#{place}' - #{e.message}"
-        @vars[:return_code] = -98
+            @vars[:build_ext] = 'tar.gz'
+            @vars[:build_bra] = meta[:Branch].gsub(%r([/|]),'.')
+            @vars[:build_ver] = "#{meta[:Version]}"
+            @vars[:build_vrb] = "#{@vars[:build_ver]}-release-#{meta[:Release]}-#{@vars[:build_bra]}-#{@vars[:variant]}" #
+            @vars[:build_nam] = "#{@vars[:project_name]}-#{@vars[:build_vrb]}"
+            @vars[:build_rel] = "#{@vars[:build_nam]}-build-#{@vars[:build_num]}"
+            @vars[:build_dir] = "#{ENV['WORKSPACE']}/#{@vars[:build_rel]}"
+            @vars[:latest_pkg]= "#{@vars[:build_store]}/#{@vars[:build_rel]}.#{@vars[:build_ext]}"
+            @vars[:build_pkg] = "#{@vars[:build_rel]}.#{@vars[:build_ext]}"
+            @vars[:build_chk] = "#{@vars[:build_rel]}.checksum"
+            @vars[:build_mff] = "#{@vars[:build_rel]}.manifest"
+            @vars[:build_mdf] = "#{@vars[:build_rel]}.meta"
+            @vars[:build_mdd] = meta.dup
+            #noinspection RubyArgCount
+            @vars[:build_mds] = Digest::SHA256.hexdigest(meta.to_s)
+
+            @vars[:return_code] = 0
+
+          rescue Exception => e
+            @logger.error "#{e.class}:: '#{place}' - #{e.message}"
+            @vars[:return_code] = -98
+          end
+
+        else
+          puts "Invalid workspace: '#{ENV['WORKSPACE']}'"
+          @vars[:return_code] = -97
+        end
+      end
+
+      if @vars[:return_code] == 0
+        @vars[:local_dirs] ||= {}
+        %w(artifacts latest).each do |dir|
+          @vars[:local_dirs][dir] = "#{ENV['WORKSPACE']}/#{dir}"
+          unless File.directory?(dir)
+            Dir.mkdir(dir)
+          end
+        end
       end
 
       @vars[:return_code]
@@ -87,7 +109,8 @@ module CiCd
             @vars[:build_sha] = IO.readlines(@vars[:build_chk])
             unless @vars[:build_sha].is_a?(Array)
               @logger.error "Unable to parse build checksum from #{@vars[:build_chk]}"
-              return -97
+              @vars[:return_code] = -97
+              return @vars[:return_code]
             end
             @vars[:build_sha] = @vars[:build_sha][0].chomp()
           else
@@ -99,17 +122,25 @@ module CiCd
           end
           if do_build
             @vars[:return_code] = cleanupBuild()
-            return @vars[:return_code] unless @vars[:return_code] == 0
-            @vars[:build_dte] = DateTime.now.strftime("%F %T%:z")
-            createMetaData()
-            @vars[:return_code] = packageBuild()
-            if 0 == @vars[:return_code]
-              @vars[:check_sha] = @vars[:build_sha]
-              @vars[:build_sha] = Digest::SHA256.file(@vars[:build_pkg]).hexdigest()
-              IO.write(@vars[:build_chk], @vars[:build_sha])
+            if @vars[:return_code] == 0
+              @vars[:build_dte] = DateTime.now.strftime("%F %T%:z")
+              createMetaData()
+              @vars[:return_code] = packageBuild()
+              if 0 == @vars[:return_code]
+                @vars[:check_sha] = @vars[:build_sha]
+                @vars[:build_sha] = if File.exists?(@vars[:build_pkg])
+                                      Digest::SHA256.file(@vars[:build_pkg]).hexdigest()
+                                    else
+                                      '0'
+                                    end
+                unless IO.write(@vars[:build_chk], @vars[:build_sha]) > 0
+                  @logger.error "Unable to store checksum in '#{@vars[:build_chk]}'"
+                  @vars[:return_code] = -94
+                end
+              end
+              reportStatus()
+              reportResult()
             end
-            reportStatus()
-            reportResult()
           else
             reportStatus()
 
@@ -123,7 +154,7 @@ module CiCd
           @vars[:return_code] = -99
         end
       else
-        @logger.error ":build_dir or :build_pkg is unknown"
+        @logger.error ':build_dir or :build_pkg is unknown'
         @vars[:return_code] = 2
       end
       @vars[:return_code]

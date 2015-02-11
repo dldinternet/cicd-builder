@@ -13,7 +13,8 @@ module CiCd
 		require 'fileutils'
 		require 'digest'
 		require 'yajl/json_gem'
-		require 'aws-sdk'
+		require 'aws-sdk-core'
+		require 'aws-sdk-resources'
 
 		_lib=File.dirname(__FILE__)
 		$:.unshift(_lib) unless $:.include?(_lib)
@@ -56,34 +57,36 @@ module CiCd
       end
 
 			# ---------------------------------------------------------------------------------------------------------------
-			def run()
+			def setup()
 				$stdout.write("CiCd::Builder v#{VERSION}\n")
+        @default_options[:env_keys] = Hash[@default_options[:env_keys].flatten.map.with_index.to_a].keys
 				parseOptions()
+			end
 
-				ret = checkEnvironment()
-				if 0 == ret
-					ret = getVars()
-          if 0 == ret
-            ret = prepareBuild()
-            if 0 == ret
-              ret = makeBuild()
-              if 0 == ret
-                ret = saveBuild()
-                if 0 == ret
-                  ret = uploadBuildArtifacts()
-                  if 0 == ret
-                    # noop
-                  end
-                end
-              end
-            end
-          end
+			# ---------------------------------------------------------------------------------------------------------------
+			def run()
+				setup()
+
+        ret = 0
+				%w(checkEnvironment getVars prepareBuild makeBuild saveBuild uploadBuildArtifacts).each do |step|
+          @logger.info "Step: #{step}"
+          ret = send(step)
+          break unless ret == 0
         end
 
 				@vars[:return_code]
 			end
 
 		end
+
+    def isSameDirectory(pwd, workspace)
+      pwd = File.realdirpath(File.expand_path(pwd))
+      workspace = File.realdirpath(File.expand_path(workspace))
+      unless pwd == workspace
+
+      end
+      return pwd, workspace
+    end
 
 	end
 end

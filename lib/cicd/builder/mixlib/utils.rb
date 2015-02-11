@@ -23,5 +23,15 @@ module CiCd
 			down
 		end
 
-	end
+    # ---------------------------------------------------------------------------------------------------------------
+    def addArtifact(artifacts, script, prefix)
+      key = "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{script.gsub(%r|^#{prefix}|, '')}"
+      # Store the artifact - be sure to inherit possible overrides in pkg name and ext but dictate the drawer!
+      artifacts << {
+          key: key,
+          data: {:file => script},
+      }
+    end
+
+  end
 end
