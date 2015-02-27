@@ -16,6 +16,7 @@ module CiCd
         def getS3()
           region = ENV['AWS_REGION'] || ::Aws.config[:region] || 'us-east-1'
           unless @s3
+            # noinspection RubyArgCount
             @s3 = ::Aws::S3::Client.new(region: region)
           end
           unless @s3 and ((@s3.config.access_key_id and @s3.config.secret_access_key) or @s3.config.credentials)
@@ -29,6 +30,7 @@ EC2 Instance profile
               @logger.info "Trying profile '#{ENV['AWS_PROFILE']}' explicitly"
               creds = Aws::SharedCredentials.new( path: File.expand_path('~/.aws/credentials'), profile: ENV['AWS_PROFILE'] )
               if creds.loadable?
+                # noinspection RubyArgCount
                 @s3 = ::Aws::S3::Client.new(region: region, credentials: creds)
               end
             else
@@ -65,7 +67,7 @@ EC2 Instance profile
                   else
                     raise "Internal error: No :file in #{art[:data].ai}"
                   end
-            if s3_obj.nil?
+            unless s3_obj.nil?
               unless etag == md5
                 checksum = s3_obj.metadata[:checksum]
                 unless checksum and checksum == md5
