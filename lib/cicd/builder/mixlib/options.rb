@@ -7,34 +7,40 @@ module CiCd
 			@options = {
                     log_level:      :warn,
                     #dry_run:       false,
-
+                    trace:          false,
                     gen:            '3.0.0',
                   }.merge @default_options
 
 			opt_parser = OptionParser.new do |opts|
 				opts.banner = "Usage: #{MYNAME} [@options]"
 
-				opts.on('-l', '--log_level LEVEL', '--log-level LEVEL', [:trace, :debug, :info, :note, :warn, :error, :fatal, :todo], "Log level ([:trace, :debug, :info, :step, :warn, :error, :fatal, :todo])") do |v|
+				opts.on('-l', '--log_level LEVEL', '--log-level LEVEL', [:trace, :debug, :info, :note, :warn, :error, :fatal, :todo], 'Log level ([:trace, :debug, :info, :step, :warn, :error, :fatal, :todo])') do |v|
 					@options[:log_level] = v
 				end
-				opts.on("-f", "--inifile FILE", "INI file with settings") do |v|
+				opts.on('-f', '--inifile FILE', 'INI file with settings') do |v|
 					@options[:inifile] = v
 				end
-				#opts.on("-n", "--[no-]dry-run", "Do a dry run, Default --no-dry-run") do |v|
-				#	@options[:dry_run] = v
-				#end
+				opts.on('-t', '--[no-]trace', 'Print backtrace in log, Default --no-trace') do |v|
+					@options[:trace] = v
+				end
 			end
 
 			opt_parser.parse!
 
 			# Set up logger
-			Logging.init :trace, :debug, :info, :note, :warn, :error, :fatal, :todo
+			Logging.init :trace, :debug, :info, :note, :step, :warn, :error, :fatal, :todo
 			@logger = Logging.logger(STDOUT,
 			                         :pattern      => "%#{::Logging::MAX_LEVEL_LENGTH}l: %m\n",
 			                         :date_pattern => '%Y-%m-%d %H:%M:%S')
 			@logger.level = @options[:log_level]
 
-			if @options.key?(:inifile)
+      unless @options[:inifile]
+        if ENV.has_key?('INIFILE')
+          @vars[:inifile] = ENV['INIFILE']
+        end
+      end
+
+      if @options.key?(:inifile)
 				@options[:inifile] = File.expand_path(@options[:inifile])
 				unless File.exist?(@options[:inifile])
 					raise StandardError.new("#{@options[:inifile]} not found!")

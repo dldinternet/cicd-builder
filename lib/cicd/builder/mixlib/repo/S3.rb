@@ -4,25 +4,35 @@ require 'aws-sdk-resources'
 module CiCd
 	module Builder
     module Repo
-      module S3
+      class S3 < CiCd::Builder::Repo::Base
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def initialize(builder)
+          raise "Missing variable AWS_S3_BUCKET" unless ENV.has_key?('AWS_S3_BUCKET')
+          super(builder)
+        end
+
         # ---------------------------------------------------------------------------------------------------------------
         def getS3()
           region = ENV['AWS_REGION'] || ::Aws.config[:region] || 'us-east-1'
           unless @s3
-            @s3 = ::Aws::S3::Client.new(             region: region)
+            @s3 = ::Aws::S3::Client.new(region: region)
           end
           unless @s3 and ((@s3.config.access_key_id and @s3.config.secret_access_key) or @s3.config.credentials)
             @logger.warn "Unable to find AWS credentials in standard locations:
 ENV['AWS_ACCESS_KEY'] and ENV['AWS_SECRET_ACCESS_KEY']
 Aws.config[:credentials]
 Shared credentials file, ~/.aws/credentials
-EC2 Instance profile\n"
+EC2 Instance profile
+"
             if ENV['AWS_PROFILE']
-              @logger.info "Trying profile '#{ENV['AWS_PROFILE']}'"
+              @logger.info "Trying profile '#{ENV['AWS_PROFILE']}' explicitly"
               creds = Aws::SharedCredentials.new( path: File.expand_path('~/.aws/credentials'), profile: ENV['AWS_PROFILE'] )
               if creds.loadable?
                 @s3 = ::Aws::S3::Client.new(region: region, credentials: creds)
               end
+            else
+              @logger.warn 'No AWS_PROFILE defined'
             end
           end
           unless @s3 and ((@s3.config.access_key_id and @s3.config.secret_access_key) or @s3.config.credentials)
@@ -38,17 +48,22 @@ EC2 Instance profile\n"
 
             s3_obj = maybeS3Object(art[:key], s3)
             upload = false
-            if art[:data].has_key?(:file)
-              md5 = Digest::MD5.file(art[:data][:file]).hexdigest
-            else
-              #noinspection RubyArgCount
-              md5 = Digest::MD5.hexdigest(art[:data][:data])
+            md5 = nil
+            if art[:data][:data]
+              # md5 = Digest::MD5.hexdigest(art[:data][:data])
+              tempArtifactFile('artifact', art[:data])
             end
             if s3_obj.nil?
               upload = true
             else
               @logger.info "s3://#{ENV['AWS_S3_BUCKET']}/#{art[:key]} exists"
               etag = s3_obj.etag.gsub(/"/, '')
+              md5 = if art[:data].has_key?(:file)
+                      # md5 = Digest::MD5.file(art[:data][:file]).hexdigest
+                      calcLocalETag(etag, art[:data][:file])
+                    else
+                      raise "Internal error: No :file in #{art[:data].ai}"
+                    end
               unless etag == md5
                 checksum = s3_obj.metadata[:checksum]
                 unless checksum and checksum == md5
@@ -66,19 +81,19 @@ EC2 Instance profile\n"
                 size = File.size(art[:data][:file])
                 body = File.open(art[:data][:file], 'r')
               else
-                size = art[:data][:data].length
-                body = art[:data][:data]
+                # size = art[:data][:data].length
+                # body = art[:data][:data]
+                raise "Internal error: No :file in #{art[:data].ai}"
               end
               art[:data][:metadata] = {checksum: md5, digest: "md5=#{md5}"}
               # art[:data][:'x-amz-meta-digest'] = "md5=#{md5}"
-              res = s3.put_object(         bucket: ENV['AWS_S3_BUCKET'],
-                                           key: art[:key],
-                                           body: body,
+              res = s3.put_object(        bucket: ENV['AWS_S3_BUCKET'],
+                                             key: art[:key],
+                                            body: body,
                                            # acl: 'authenticated-read',
-                                           content_length: size,
-                                           #    content_md5: md5,
-                                           metadata: art[:data][:metadata],
-              )
+                                  content_length: size,
+                                        metadata: art[:data][:metadata],
+                                  )
               s3_obj = maybeS3Object(art[:key], s3)
               raise "Failed to upload '#{art[:key]}'" unless s3_obj
               if art.has_key?(:public_url)
@@ -88,6 +103,9 @@ EC2 Instance profile\n"
                 @vars[art[:read_url]]   = s3_obj.presigned_url(:get, expires_in: 86400)
                 @logger.info "#{art[:label]}: #{@vars[art[:read_url]]}"
               end
+            end
+            if art[:data][:temp]
+              File.unlink(art[:data][:file])
             end
           }
           0
@@ -105,68 +123,6 @@ EC2 Instance profile\n"
             nil
           end
           s3_obj
-        end
-
-        # ---------------------------------------------------------------------------------------------------------------
-        def initInventory()
-
-          hash =
-              {
-                  id:   "#{@vars[:project_name]}",
-                  #  In case future generations introduce incompatible features
-                  gen:  "#{@options[:gen]}",
-                  container:  {
-                      artifacts: %w(assembly metainfo checksum),
-                      naming: '<product>-<major>.<minor>.<patch>-<branch>-release-<number>-build-<number>.<extension>',
-                      assembly: {
-                          extension:  'tar.gz',
-                          type:       'targz'
-                      },
-                      metainfo: {
-                          extension:  'MANIFEST.json',
-                          type:       'json'
-                      },
-                      checksum: {
-                          extension:  'checksum',
-                          type:       'Digest::SHA256'
-                      },
-                      variants: {
-                          :"#{@vars[:variant]}" => {
-                              latest: {
-                                  build:   0,
-                                  branch:  0,
-                                  version: 0,
-                                  release: 0,
-                              },
-                              versions: [ "#{@vars[:build_ver]}" ],
-                              branches: [ "#{@vars[:build_bra]}" ],
-                              builds: [
-                                  {
-                                      drawer:       @vars[:build_nam],
-                                      build_name:   @vars[:build_rel],
-                                      build_number: @vars[:build_num],
-                                      release:      @vars[:release],
-                                  }
-                              ],
-                          }
-                      }
-                  }
-              }
-          artifacts = getArtifactsDefinition()
-          naming    = getNamingDefinition()
-
-          # By default we use the internal definition ...
-          if artifacts
-            artifacts.each do |name,artifact|
-              hash[:container][name] = artifact
-            end
-          end
-
-          # By default we use the internal definition ...
-          if naming
-            hash[:container][:naming] = naming
-          end
-          JSON.pretty_generate( hash, { indent: "\t", space: ' '})
         end
 
         # ---------------------------------------------------------------------------------------------------------------
@@ -249,11 +205,11 @@ EC2 Instance profile\n"
           else
             raise CiCd::Builder::Errors::Internal.new sprintf('Internal logic error! %s::%d', __FILE__,__LINE__) if varianth.nil?
             # Add the new build if we don't have it
-            unless varianth['builds'].map { |b| b['build_name'] }.include?(@vars[:build_rel])
+            unless varianth['builds'].map { |b| b['build_name'] }.include?(@vars[:build_nmn])
               #noinspection RubyStringKeysInHashInspection
               filing = {
                   'drawer'        => @vars[:build_nam],
-                  'build_name'    => @vars[:build_rel],
+                  'build_name'    => @vars[:build_nmn],
                   'build_number'  => @vars[:build_num],
                   'release'       => @vars[:release],
               }
@@ -309,12 +265,12 @@ EC2 Instance profile\n"
                                         metadata: {checksum: md5, digest: "md5=#{md5}"},
             )
             s3_obj = maybeS3Object(key)
-            s3_obj.etag
+            # s3_obj.etag
             @logger.info "Inventory URL: #{s3_obj.presigned_url(:get, expires_in: 86400)}"
             return 0
           rescue Exception => e
             @logger.error("Exception: #{e.class.name}: #{e.message}\n#{e.backtrace.ai}")
-            return -1
+            return Errors::INVENTORY_UPLOAD_EXCEPTION
           end
         end
 
@@ -346,8 +302,51 @@ EC2 Instance profile\n"
         end
 
         # ---------------------------------------------------------------------------------------------------------------
-        def getKey
-          key = "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_rel]}"
+        def uploadBuildArtifacts()
+          if @vars.has_key?(:build_dir) and @vars.has_key?(:build_pkg)
+            artifacts = @vars[:artifacts] rescue []
+
+            key = getKey()
+            if File.exists?(@vars[:build_pkg])
+              # Store the assembly - be sure to inherit possible overrides in pkg name and ext but dictate the drawer!
+              artifacts << {
+                  key:        "#{File.join(File.dirname(key),File.basename(@vars[:build_pkg]))}",
+                  data:       {:file => @vars[:build_pkg]},
+                  public_url: :build_url,
+                  label:      'Package URL'
+              }
+            else
+              @logger.warn "Skipping upload of missing artifact: '#{@vars[:build_pkg]}'"
+            end
+
+            # Store the metadata
+            manifest = manifestMetadata()
+            artifacts << {
+                key:        "#{key}.MANIFEST.json",
+                data:       {:data => manifest},
+                public_url: :manifest_url,
+                read_url:   :manifest_url,
+                label:      'Manifest URL'
+            }
+
+            # Store the checksum
+            artifacts << {
+                key:        "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_nmn]}.checksum",
+                data:       {:data => @vars[:build_sha]},
+                public_url: :checksum_url,
+                read_url:   :checksum_url,
+                label:      'Checksum URL'
+            }
+
+            @vars[:return_code] = uploadToRepo(artifacts)
+            if 0 == @vars[:return_code]
+              @vars[:return_code] = takeInventory()
+            end
+            @vars[:return_code]
+          else
+            @vars[:return_code] = Errors::NO_ARTIFACTS
+          end
+          @vars[:return_code]
         end
 
       end

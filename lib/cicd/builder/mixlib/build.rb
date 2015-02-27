@@ -5,6 +5,7 @@ module CiCd
 
 		# ---------------------------------------------------------------------------------------------------------------
 		def cleanupBuild()
+      @logger.step __method__.to_s
       [ :build_pkg, :build_chk, :build_mdf, :build_mff ].each do |fil|
         if File.exists?(@vars[fil])
           begin
@@ -12,7 +13,7 @@ module CiCd
           rescue => e
             @logger.error e.to_s
             #raise e
-            return -96
+            return Errors::CLEANUPBUILD_EXCEPTION
           end
         end
       end
@@ -22,7 +23,7 @@ module CiCd
 				rescue => e
 					@logger.error e.to_s
 					#raise e
-					return -95
+					return Errors::CLEANUPBUILD_EXCEPTION
 				end
 			end
 			0
@@ -35,7 +36,7 @@ module CiCd
       %w[ WORKSPACE PROJECT_NAME ].each do |e|
         unless ENV.has_key?(e)
           puts "#{e} environment variable is required"
-          @vars[:return_code] = -99
+          @vars[:return_code] = Errors::MISSING_ENV_VAR
         end
       end
       meta[:Version] = @vars[:version]
@@ -61,15 +62,16 @@ module CiCd
             @vars[:build_ext] = 'tar.gz'
             @vars[:build_bra] = meta[:Branch].gsub(%r([/|]),'.')
             @vars[:build_ver] = "#{meta[:Version]}"
+            @vars[:build_rel] = "#{meta[:Release]}"
             @vars[:build_vrb] = "#{@vars[:build_ver]}-release-#{meta[:Release]}-#{@vars[:build_bra]}-#{@vars[:variant]}" #
             @vars[:build_nam] = "#{@vars[:project_name]}-#{@vars[:build_vrb]}"
-            @vars[:build_rel] = "#{@vars[:build_nam]}-build-#{@vars[:build_num]}"
-            @vars[:build_dir] = "#{ENV['WORKSPACE']}/#{@vars[:build_rel]}"
-            @vars[:latest_pkg]= "#{@vars[:build_store]}/#{@vars[:build_rel]}.#{@vars[:build_ext]}"
-            @vars[:build_pkg] = "#{@vars[:build_rel]}.#{@vars[:build_ext]}"
-            @vars[:build_chk] = "#{@vars[:build_rel]}.checksum"
-            @vars[:build_mff] = "#{@vars[:build_rel]}.manifest"
-            @vars[:build_mdf] = "#{@vars[:build_rel]}.meta"
+            @vars[:build_nmn] = "#{@vars[:build_nam]}-build-#{@vars[:build_num]}"
+            @vars[:build_dir] = "#{ENV['WORKSPACE']}/#{@vars[:build_nmn]}"
+            @vars[:latest_pkg]= "#{@vars[:build_store]}/#{@vars[:build_nmn]}.#{@vars[:build_ext]}"
+            @vars[:build_pkg] = "#{@vars[:build_nmn]}.#{@vars[:build_ext]}"
+            @vars[:build_chk] = "#{@vars[:build_nmn]}.checksum"
+            @vars[:build_mff] = "#{@vars[:build_nmn]}.manifest"
+            @vars[:build_mdf] = "#{@vars[:build_nmn]}.meta"
             @vars[:build_mdd] = meta.dup
             #noinspection RubyArgCount
             @vars[:build_mds] = Digest::SHA256.hexdigest(meta.to_s)
@@ -78,12 +80,12 @@ module CiCd
 
           rescue Exception => e
             @logger.error "#{e.class}:: '#{place}' - #{e.message}"
-            @vars[:return_code] = -98
+            @vars[:return_code] = Errors::PREPAREBUILD_EXCEPTION
           end
 
         else
           puts "Invalid workspace: '#{ENV['WORKSPACE']}'"
-          @vars[:return_code] = -97
+          @vars[:return_code] = Errors::INVALID_WORKSPACE
         end
       end
 
@@ -105,63 +107,100 @@ module CiCd
       if @vars.has_key?(:build_dir) and @vars.has_key?(:build_pkg)
         begin
           do_build = false
-          if File.exists?(@vars[:build_chk])
-            @vars[:build_sha] = IO.readlines(@vars[:build_chk])
-            unless @vars[:build_sha].is_a?(Array)
-              @logger.error "Unable to parse build checksum from #{@vars[:build_chk]}"
-              @vars[:return_code] = -97
-              return @vars[:return_code]
-            end
-            @vars[:build_sha] = @vars[:build_sha][0].chomp()
-          else
-            @vars[:build_sha] = ''
-            do_build = true
-          end
-          unless File.exists?(@vars[:build_pkg])
-            do_build = true
-          end
-          if do_build
-            @vars[:return_code] = cleanupBuild()
-            if @vars[:return_code] == 0
-              @vars[:build_dte] = DateTime.now.strftime("%F %T%:z")
-              createMetaData()
-              @vars[:return_code] = packageBuild()
+          loadCheckSumFile()
+          if 0 == @vars[:return_code]
+            do_build = true if @vars[:build_sha].empty?
+            do_build = true unless File.exists?(@vars[:build_pkg]) and (Digest::SHA256.file(@vars[:build_pkg]).hexdigest() == @vars[:build_sha])
+            if do_build
+              @vars[:return_code] = cleanupBuild()
               if 0 == @vars[:return_code]
-                @vars[:check_sha] = @vars[:build_sha]
-                @vars[:build_sha] = if File.exists?(@vars[:build_pkg])
-                                      Digest::SHA256.file(@vars[:build_pkg]).hexdigest()
-                                    else
-                                      '0'
-                                    end
-                unless IO.write(@vars[:build_chk], @vars[:build_sha]) > 0
-                  @logger.error "Unable to store checksum in '#{@vars[:build_chk]}'"
-                  @vars[:return_code] = -94
+                @vars[:build_dte] = DateTime.now.strftime('%F %T%:z')
+                createMetaData()
+                if 0 == @vars[:return_code]
+                  @vars[:return_code] = packageBuild()
+                  if 0 == @vars[:return_code]
+                    @vars[:check_sha] = @vars[:build_sha]
+                    @vars[:build_sha] = if File.exists?(@vars[:build_pkg])
+                                          Digest::SHA256.file(@vars[:build_pkg]).hexdigest()
+                                        else
+                                          '0'
+                                        end
+                    unless IO.write(@vars[:build_chk], @vars[:build_sha]) > 0
+                      @logger.error "Unable to store checksum in '#{@vars[:build_chk]}'"
+                      @vars[:return_code] = Errors::STORING_BUILD_CHECKSUM
+                    end
+                  end
                 end
               end
-              reportStatus()
-              reportResult()
             end
-          else
-            reportStatus()
+          end
 
-            # No need to build again :)
+          # Report status regardless of return code.
+          reportStatus()
+
+          if do_build
+            reportResult()
+          else
+            # Was no need to build :) or a failure :(
             @logger.info "NO_CHANGE: #{ENV['JOB_NAME']} #{ENV['BUILD_NUMBER']} #{@vars[:build_nam]} #{@vars[:build_pkg]} #{@vars[:build_chk]} [#{@vars[:build_sha]}]"
-            @vars[:return_code] = 0
+            # @vars[:return_code] = 0
             return 1
           end
         rescue => e
-          @logger.error "#{e.class.name} #{e.message}"
-          @vars[:return_code] = -99
+          @logger.error "makeBuild failure: #{e.class.name} #{e.message}"
+          @vars[:return_code] = Errors::MAKEBUILD_EXCEPTION
         end
       else
         @logger.error ':build_dir or :build_pkg is unknown'
-        @vars[:return_code] = 2
+        @vars[:return_code] = Errors::MAKEBUILD_PREPARATION
       end
       @vars[:return_code]
     end
 
     # ---------------------------------------------------------------------------------------------------------------
+    def loadCheckSumFile
+      if File.exists?(@vars[:build_chk])
+        @vars[:build_sha] = IO.readlines(@vars[:build_chk])
+        unless @vars[:build_sha].is_a?(Array)
+          @logger.error "Unable to parse build checksum from #{@vars[:build_chk]}"
+          @vars[:return_code] = Errors::PARSING_BUILD_CHECKSUM
+        end
+        @vars[:build_sha] = @vars[:build_sha][0].chomp()
+      else
+        @vars[:build_sha] = ''
+      end
+      @vars[:return_code]
+    end
+
+    # ---------------------------------------------------------------------------------------------------------------
+    def calcLocalETag(etag, local, size = nil)
+      if size == nil
+        stat = File.stat(local)
+        size = stat.size
+      end
+      match = etag.match(%r'-(\d+)$')
+      check = if match
+                require 's3etag'
+                parts = match[1].to_i
+                chunk = size.to_f / parts.to_f
+                mbs = (chunk.to_f / 1024 /1024 + 0.5).to_i
+                part_size = mbs * 1024 * 1024
+                chkit = S3Etag.calc(file: local, threshold: part_size, min_part_size: part_size, max_parts: parts)
+                while chkit != etag and (size / part_size) <= parts
+                  # Go one larger if a modulus remains and we have the right number of parts
+                  mbs += 1
+                  part_size = mbs * 1024 * 1024
+                  chkit = S3Etag.calc(file: local, threshold: part_size, min_part_size: part_size, max_parts: parts)
+                end
+                chkit
+              else
+                Digest::MD5.file(local).hexdigest
+              end
+    end
+
+    # ---------------------------------------------------------------------------------------------------------------
 		def packageBuild()
+      @logger.step __method__.to_s
 			excludes=%w(*.iml *.txt *.sh *.md .gitignore .editorconfig .jshintrc *.deprecated adminer doc)
 			excludes = excludes.map{ |e| "--exclude=#{@vars[:build_nam]}/#{e}" }.join(' ')
 			cmd = %(cd #{ENV['WORKSPACE']}; tar zcvf #{@vars[:build_pkg]} #{excludes} #{@vars[:build_nam]} 1>#{@vars[:build_pkg]}.manifest)
@@ -175,6 +214,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def createMetaData()
+      @logger.step __method__.to_s
       @vars[:build_mdd].merge!({
                                 :Generation => @options[:gen],
                                 :Project => @vars[:project_name],
@@ -185,7 +225,11 @@ module CiCd
 
                                       })
       json = JSON.pretty_generate( @vars[:build_mdd], { indent: "\t", space: ' '})
-      IO.write(@vars[:build_mdf], json)
+      unless IO.write(@vars[:build_mdf], json) > 0
+        @logger.error "Unable to store metadata in '#{@vars[:build_mdf]}'"
+        @vars[:return_code] = Errors::STORING_BUILD_METADATA
+      end
+      @vars[:return_code]
     end
 
   end

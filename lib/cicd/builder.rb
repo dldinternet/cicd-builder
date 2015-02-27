@@ -69,7 +69,7 @@ module CiCd
 
         ret = 0
 				%w(checkEnvironment getVars prepareBuild makeBuild saveBuild uploadBuildArtifacts).each do |step|
-          @logger.info "Step: #{step}"
+          @logger.step "#{step}"
           ret = send(step)
           break unless ret == 0
         end

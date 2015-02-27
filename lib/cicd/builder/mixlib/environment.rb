@@ -63,7 +63,7 @@ module CiCd
 
 			if ENV.has_key?('VARIANT')
 				@vars[:variant] = "#{ENV['VARIANT']}"
-			end
+      end
 
 			if ENV.has_key?('BUILD_NUMBER')
 				@vars[:build_num] = "#{ENV['BUILD_NUMBER']}"
@@ -72,6 +72,7 @@ module CiCd
 			@vars[:return_code] = getLatest()
 		end
 
+    # ---------------------------------------------------------------------------------------------------------------
     def getLatest
       ret = 0
       @vars[:vars_fil] = "#{@vars[:build_store]}/#{ENV['JOB_NAME']}-#{@vars[:variant]}.env"
@@ -89,27 +90,46 @@ module CiCd
           end
         end
       end
+      ret = loadLatestVarsFile
+      ret
+    end
+
+    # ---------------------------------------------------------------------------------------------------------------
+    def loadLatestVarsFile
+      ret = 0
       if File.exists?(@vars[:latest_fil])
         @vars[:latest_ver] = IO.readlines(@vars[:latest_fil])
         unless @vars[:latest_ver].is_a?(Array)
           @logger.error "Unable to parse latest version from #{@vars[:latest_fil]}"
-          ret = -97
+          ret = Errors::PARSING_LATEST_VERSION
         end
         @vars[:latest_sha] = @vars[:latest_ver][1].chomp() if (@vars[:latest_ver].length > 1)
         @vars[:latest_ver] = @vars[:latest_ver][0].chomp()
+        if @vars[:latest_ver] =~ %r'-\d+$'
+          @vars[:latest_ver], @vars[:latest_rel] = @vars[:latest_ver].split(/-/)
+        end
       end
       ret
     end
 
     # ---------------------------------------------------------------------------------------------------------------
+    def saveLatestVarsFile
+      @logger.info "Save latest build info to #{@vars[:latest_fil]}"
+      wrote = IO.write(@vars[:latest_fil], "#{@vars[:build_ver]}-#{@vars[:build_rel]}\n#{@vars[:build_sha]}")
+      ret = (wrote > 0) ? 0 : Errors::SAVE_LATEST_VARS
+    end
+
+    # ---------------------------------------------------------------------------------------------------------------
 		def saveEnvironment(ignored=ENV_IGNORED)
+      @logger.step __method__.to_s
 			@logger.info "Save environment to #{@vars[:vars_fil]}"
 			vstr = ['[global]']
 			ENV.to_hash.sort.each{|k,v|
 				vstr << %(#{k}="#{v}") unless ignored.include?(k)
 			}
 
-			IO.write(@vars[:vars_fil], vstr.join("\n"))
+      @vars[:return_code] = (IO.write(@vars[:vars_fil], vstr.join("\n")) > 0) ? 0 : Errors::SAVE_ENVIRONMENT_VARS
+      return @vars[:return_code]
 		end
 
     # ---------------------------------------------------------------------------------------------------------------
@@ -124,7 +144,11 @@ module CiCd
         end
         if @vars[:latest_ver] != @vars[:build_ver]
           change = true
-          @logger.info "CHANGE: Release [#{@vars[:latest_ver]}] => [#{@vars[:build_ver]}]"
+          @logger.info "CHANGE: Version [#{@vars[:latest_ver]}] => [#{@vars[:build_ver]}]"
+        end
+        if @vars[:latest_rel] != @vars[:build_rel]
+          change = true
+          @logger.info "CHANGE: Release [#{@vars[:latest_rel]}] => [#{@vars[:build_rel]}]"
         end
         unless File.file?(@vars[:build_pkg])
           change = true
@@ -147,14 +171,21 @@ module CiCd
           else
             @logger.warn "Skipping link #{@vars[:latest_pkg]} to missing '#{@vars[:build_pkg]}'"
           end
-          @logger.info "Save latest build info to #{@vars[:latest_fil]}"
-          IO.write(@vars[:latest_fil], "#{@vars[:build_ver]}\n#{@vars[:build_sha]}")
-          saveEnvironment(ENV_IGNORED)
+          @vars[:return_code] = saveLatestVarsFile()
+          unless 0 == @vars[:return_code]
+            @logger.error "Failed to save latest vars file: #{@vars[:latest_fil]}"
+            return @vars[:return_code]
+          end
+          @vars[:return_code] = saveEnvironment(ENV_IGNORED)
+          unless 0 == @vars[:return_code]
+            @logger.error "Failed to save environment vars file: #{@vars[:vars_fil]}"
+            return @vars[:return_code]
+          end
           # NOTE the '.note'!
-          @logger.note "CHANGE: #{ENV['JOB_NAME']} (#{@vars[:build_ver]}[#{@vars[:build_sha]}])"
+          @logger.note "CHANGE: #{ENV['JOB_NAME']} (#{@vars[:build_ver]}-#{@vars[:build_rel]}[#{@vars[:build_sha]}])"
         else
-          @logger.info "Artifact #{@vars[:latest_pkg]} unchanged (#{@vars[:latest_ver]} [#{@vars[:latest_sha]}])"
-          @logger.info "NO_CHANGE: #{ENV['JOB_NAME']} #{@vars[:latest_ver]}"
+          @logger.info "Artifact #{@vars[:latest_pkg]} unchanged (#{@vars[:latest_ver]}-#{@vars[:latest_rel]} [#{@vars[:latest_sha]}])"
+          @logger.note "NO_CHANGE: #{ENV['JOB_NAME']} #{@vars[:latest_ver]}"
         end
         @vars[:return_code] = 0
       rescue => e
