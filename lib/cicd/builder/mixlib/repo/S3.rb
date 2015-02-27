@@ -48,22 +48,24 @@ EC2 Instance profile
 
             s3_obj = maybeS3Object(art[:key], s3)
             upload = false
-            md5 = nil
             if art[:data][:data]
               # md5 = Digest::MD5.hexdigest(art[:data][:data])
               tempArtifactFile('artifact', art[:data])
             end
             if s3_obj.nil?
               upload = true
+              etag   = ''
             else
               @logger.info "s3://#{ENV['AWS_S3_BUCKET']}/#{art[:key]} exists"
               etag = s3_obj.etag.gsub(/"/, '')
-              md5 = if art[:data].has_key?(:file)
-                      # md5 = Digest::MD5.file(art[:data][:file]).hexdigest
-                      calcLocalETag(etag, art[:data][:file])
-                    else
-                      raise "Internal error: No :file in #{art[:data].ai}"
-                    end
+            end
+            md5 = if art[:data].has_key?(:file)
+                    # md5 = Digest::MD5.file(art[:data][:file]).hexdigest
+                    calcLocalETag(etag, art[:data][:file])
+                  else
+                    raise "Internal error: No :file in #{art[:data].ai}"
+                  end
+            if s3_obj.nil?
               unless etag == md5
                 checksum = s3_obj.metadata[:checksum]
                 unless checksum and checksum == md5
