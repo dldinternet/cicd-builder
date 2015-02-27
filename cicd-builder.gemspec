@@ -6,7 +6,7 @@ Gem::Specification.new do |gem|
   gem.name          = 'cicd-builder'
   gem.version       = CiCd::Builder::VERSION
   gem.summary       = 'Jenkins builder task for CI/CD'
-  gem.description   = 'Jenkins builder task for CI/CD'
+  gem.description   = 'Jenkins builder task for Continuous Integration/Continuous Delivery artifact promotion style deployments'
   gem.license       = 'Apachev2'
   gem.authors       = ['Christo De Lange']
   gem.email         = 'rubygems@dldinternet.com'
@@ -20,7 +20,7 @@ Gem::Specification.new do |gem|
   gem.add_dependency 'awesome_print', '>= 1.2.0', '< 1.3'
   gem.add_dependency 'inifile', '>= 3.0.0', '< 3.1'
   gem.add_dependency 'logging', '>= 1.8.2', '< 1.9'
-  gem.add_dependency 'json', '~> 1.8.1'
+  gem.add_dependency 'json', '>= 1.8.1', '< 1.9'
   gem.add_dependency 'chef', '>= 11.18.2', '< 12'
   gem.add_dependency 'aws-sdk', '>= 2.0', '< 2.1'
   gem.add_dependency 'yajl-ruby', '>= 1.2.1', '< 1.3'
