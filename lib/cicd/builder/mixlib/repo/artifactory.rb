@@ -106,7 +106,7 @@ module CiCd
             unless file_name.empty? or file_name.match(%r'^-')
               file_name = "-#{file_name}"
             end
-            artifact_name = "#{data[:name]}-#{data[:version]}#{file_name}-#{@vars[:variant]}.#{file_ext}" # -#{data[:build]}
+            artifact_name = "#{data[:name]}-#{data[:version]}#{file_name}-#{data[:build]}.#{file_ext}" # -#{@vars[:variant]}
             artifact_path = "#{artifactory_org_path()}/#{data[:name]}/#{data[:version]}-#{@vars[:variant]}/#{artifact_name}"
             manifest[data[:name]] = artifact_path
             if objects.nil? or objects.size == 0

@@ -6,12 +6,13 @@ module CiCd
     require 'cicd/builder/mixlib/repo/base'
     require 'cicd/builder/mixlib/repo/S3'
     # noinspection RubyResolve
-    if ENV.has_key?('REPO_TYPE') and (not ENV['REPO_TYPE'].capitalize.equal?('S3'))
+    if ENV.has_key?('REPO_TYPE') and (not ENV['REPO_TYPE'].capitalize.eql?('S3'))
       require "cicd/builder/mixlib/repo/#{ENV['REPO_TYPE'].downcase}"
     end
 
     # ---------------------------------------------------------------------------------------------------------------
 		def getRepoClass(type = nil)
+      @logger.info __method__.to_s
       if type.nil?
         type ||= 'S3'
         if ENV.has_key?('REPO_TYPE')
@@ -19,6 +20,7 @@ module CiCd
         end
       end
 
+      @logger.info "#{type} repo interface"
       clazz = Object.const_get("CiCd::Builder::Repo::#{type}")
       if block_given?
         if clazz.is_a?(Class) and not clazz.nil?

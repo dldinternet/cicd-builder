@@ -36,7 +36,7 @@ module CiCd
 
       unless @options[:inifile]
         if ENV.has_key?('INIFILE')
-          @vars[:inifile] = ENV['INIFILE']
+          @options[:inifile] = ENV['INIFILE']
         end
       end
 
