@@ -9,6 +9,8 @@ module CiCd
 
       i = 10
       ARTIFACT_UPLOAD_EXCEPTION   = i+=1
+      ARTIFACT_NOT_UPLOADED       = i+=1
+      ARTIFACT_NOT_COPIED         = i+=1
       MAKEBUILD_EXCEPTION         = i+=1
       MAKEBUILD_PREPARATION       = i+=1
       MISSING_ENV_VAR             = i+=1
