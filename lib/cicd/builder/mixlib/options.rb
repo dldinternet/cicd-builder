@@ -51,7 +51,7 @@ module CiCd
 					# }
 					ini = IniFile.load(@options[:inifile])
 					ini['global'].each{ |key,value|
-						ENV[key]=value
+						ENV[key]=value.to_s
 					}
 					def _expand(k,v,regex,rerun)
 						matches = v.match(regex)

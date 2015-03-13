@@ -87,39 +87,61 @@ module CiCd
             else
               raise 'Artifact does not have file or data?'
             end
-            file_name    = File.basename(data[:file])
-            if file_name =~ %r'^#{data[:name]}'
-              file_name.gsub!(%r'^#{data[:name]}\.*','')
-            end
-            file_name.gsub!(%r'\.*-*#{data[:version]}','')
-            file_name.gsub!(%r'\.*-*#{data[:build]}-*','')
-            file_ext      = file_name.dup
-            file_ext.gsub!(%r'^.*?\.*(tar\.gz|tgz|tar\.bzip2|bzip2|tar\.bz2|bz2|jar|war|groovy)$','\1')
-            unless file_ext.empty?
-              file_name.gsub!(%r'\.*#{file_ext}$','')
-            end
+            file_name, file_ext = get_artifact_file_name_ext(data)
             if file_name =~ %r'\.+'
               raise "Unable to parse out file name in #{data[:file]}"
             end
             unless file_name.empty?
               file_name = '_'+file_name.gsub(%r'^(\.|-|)(\w)', '\2').gsub(%r'(\.|-)+', '_')
             end
-            maybeUploadArtifactoryObject(data, data[:name], data[:version] || @vars[:version], file_ext, file_name) # -#{@vars[:variant]
+            maybeUploadArtifactoryObject(data, data[:module], data[:version] || @vars[:version], file_ext, file_name) # -#{@vars[:variant]
             break unless @vars[:return_code] == 0
           }
           if @vars[:return_code] == 0
-            manifest_data = ''
-            @manifest.each do |k,v|
-              manifest_data += "#{k}=#{v}\n"
+            manifest = @manifest.dup
+            manifest.each do |mod,man|
+              manifest_data = ''
+              man.each do |k,v|
+                manifest_data += "#{k}=#{v}\n"
+              end
+              data = { module: mod, data: manifest_data, version: @vars[:build_ver], build: @vars[:build_num], properties: @properties_matrix }
+              tempArtifactFile("#{mod}-manifest", data)
+              data[:sha1] = Digest::SHA1.file(data[:file]).hexdigest
+              data[:md5 ] = Digest::MD5.file(data[:file]).hexdigest
+              data[:name] = "#{mod}-manifest"
+              maybeUploadArtifactoryObject(data, data[:name], data[:version] || @vars[:version], 'properties', '') # -#{@vars[:variant]}
             end
-            data = { data: manifest_data, version: @vars[:build_ver], build: @vars[:build_num], properties: @properties_matrix }
-            tempArtifactFile('manifest', data)
+            manifest_data = ''
+            manifest.each do |mod,man|
+              man.each do |k,v|
+                manifest_data += "#{k}=#{v}\n"
+              end
+            end
+            amn = artifactory_manifest_name # Just using a local iso invoking method_missing repeatedly ... ;)
+            data = { module: amn, data: manifest_data, version: @vars[:build_ver], build: @vars[:build_num], properties: @properties_matrix }
+            tempArtifactFile(amn, data)
             data[:sha1] = Digest::SHA1.file(data[:file]).hexdigest
             data[:md5 ] = Digest::MD5.file(data[:file]).hexdigest
-            data[:name] = artifactory_manifest_name
-            maybeUploadArtifactoryObject(data, artifactory_manifest_name, data[:version] || @vars[:version], 'properties', '') # -#{@vars[:variant]}
+            data[:name] = amn
+            maybeUploadArtifactoryObject(data, amn, data[:version] || @vars[:version], 'properties', '') # -#{@vars[:variant]}
+            @manifest = manifest
           end
           @vars[:return_code]
+        end
+
+        def get_artifact_file_name_ext(data)
+          file_name = File.basename(data[:file])
+          if file_name =~ %r'^#{data[:name]}'
+            file_name.gsub!(%r'^#{data[:name]}\.*', '')
+          end
+          file_name.gsub!(%r'\.*-*#{data[:version]}', '')
+          file_name.gsub!(%r'\.*-*#{data[:build]}-*', '')
+          file_ext = file_name.dup
+          file_ext.gsub!(%r'^.*?\.*(tar\.gz|tgz|tar\.bzip2|bzip2|tar\.bz2|bz2|zip|jar|war|groovy)$', '\1')
+          unless file_ext.empty?
+            file_name.gsub!(%r'\.*#{file_ext}$', '')
+          end
+          return file_name, file_ext
         end
 
         def maybeUploadArtifactoryObject(data, artifact_module, artifact_version, file_ext, file_name)
@@ -132,7 +154,7 @@ module CiCd
             upload = true
           else
             @logger.info "#{artifactory_endpoint()}/#{artifactory_repo()}/#{artifact_path} exists - #{objects.size} results"
-            @logger.info "\t#{objects.map{|o| o.attributes[:uri]}.join("\t")}"
+            @logger.info "\t#{objects.map{|o| o.attributes[:uri]}.join("\n\t")}"
             matched = matchArtifactoryObjects(artifact_path, data, objects)
             upload ||= (matched.size == 0)
           end
@@ -148,12 +170,16 @@ module CiCd
             @logger.info "Keep existing #{matched.map{|o| o.attributes[:uri]}.join("\t")}"
           end
           if data[:temp]
-            File.unlink(data[:file])
+            if File.exists?(data[:file])
+              File.unlink(data[:file]) if File.exists?(data[:file])
+            else
+              @logger.warn "Temporary file disappeared: #{data.ai}"
+            end
           end
           @vars[:return_code] = Errors::ARTIFACT_NOT_UPLOADED unless matched.size > 0
           if @vars[:return_code] == 0
             artifact_version += "-#{data[:build] || @vars[:build_num]}"
-            artifact_name = getArtifactName(artifact_module, file_name, artifact_version, file_ext, )
+            artifact_name = getArtifactName(data[:name], file_name, artifact_version, file_ext, )
             artifact_path = getArtifactPath(artifact_module, artifact_version, artifact_name)
             copies  = maybeArtifactoryObject(artifact_module, artifact_version, false)
             matched = matchArtifactoryObjects(artifact_path, data, copies)
@@ -169,7 +195,18 @@ module CiCd
             else
               @logger.info "Keep existing #{matched.map{|o| o.attributes[:uri]}.join("\t")}"
             end
-            @manifest[data[:name]] = artifact_version
+            if @manifest[artifact_module].nil?
+              @manifest[artifact_module] = {}
+              file_name = artifact_module
+            else
+              file_name, _ = get_artifact_file_name_ext(data)
+              if file_name.empty?
+                file_name = artifact_module
+              else
+                file_name = "#{artifact_module}#{file_name}"
+              end
+            end
+            @manifest[artifact_module][file_name] = artifact_version
           end
 
           @vars[:return_code]
@@ -229,9 +266,13 @@ module CiCd
           @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Uploaded: #{result.attributes.select { |k, _| k != :client }.ai}"
           artifact.upload_checksum(artifactory_repo(), "#{artifact_path}", :sha1, data[:sha1])
           artifact.upload_checksum(artifactory_repo(), "#{artifact_path}", :md5,  data[:md5])
-          objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
-          unless objects.size > 0
-            objects = maybeArtifactoryObject(artifact_module, artifact_version, true)
+          attempt = 0
+          objects = []
+          while attempt < 3
+            objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
+            break if objects.size > 0
+            sleep 2
+            attempt += 1
           end
           raise "Failed to upload '#{artifact_path}'" unless objects.size > 0
           objects
@@ -247,7 +288,11 @@ module CiCd
               @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Copied: #{result.ai}"
             end
             objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
-            raise "Failed to copy '#{artifact_path}'" unless objects.size > 0
+            unless objects.size > 0
+              sleep 10
+              objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
+              raise "Failed to copy '#{artifact_path}'" unless objects.size > 0
+            end
             objects
           rescue Exception => e
             @logger.error "Failed to copy #{artifact_path}: #{e.class.name} #{e.message}"
