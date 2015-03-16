@@ -75,11 +75,10 @@ module CiCd
           end
           # matrix = properties.map{|k,v| (v.nil? or v.empty?) ? nil : "#{k}=#{v}"}.join("\;").gsub(%r'^\;*(.*?)\;*$', '\1')
           # @client.endpoint += ";#{matrix}"
-          @manifest = {}
           artifacts.each{|art|
             data = art[:data]
             if data.has_key?(:data)
-              tempArtifactFile("manifest-#{data[:name]}", data)
+              tempArtifactFile(data[:name], data)
             end
             if data.has_key?(:file)
               data[:sha1] = Digest::SHA1.file(data[:file]).hexdigest
@@ -94,38 +93,9 @@ module CiCd
             unless file_name.empty?
               file_name = '_'+file_name.gsub(%r'^(\.|-|)(\w)', '\2').gsub(%r'(\.|-)+', '_')
             end
-            maybeUploadArtifactoryObject(data, data[:module], data[:version] || @vars[:version], file_ext, file_name) # -#{@vars[:variant]
+            maybeUploadArtifactoryObject(data: data, artifact_module: data[:module], artifact_version: data[:version] || @vars[:version], file_name: file_name, file_ext: file_ext) # -#{@vars[:variant]
             break unless @vars[:return_code] == 0
           }
-          if @vars[:return_code] == 0
-            manifest = @manifest.dup
-            manifest.each do |mod,man|
-              manifest_data = ''
-              man.each do |k,v|
-                manifest_data += "#{k}=#{v}\n"
-              end
-              data = { module: mod, data: manifest_data, version: @vars[:build_ver], build: @vars[:build_num], properties: @properties_matrix }
-              tempArtifactFile("#{mod}-manifest", data)
-              data[:sha1] = Digest::SHA1.file(data[:file]).hexdigest
-              data[:md5 ] = Digest::MD5.file(data[:file]).hexdigest
-              data[:name] = "#{mod}-manifest"
-              maybeUploadArtifactoryObject(data, data[:name], data[:version] || @vars[:version], 'properties', '') # -#{@vars[:variant]}
-            end
-            manifest_data = ''
-            manifest.each do |mod,man|
-              man.each do |k,v|
-                manifest_data += "#{k}=#{v}\n"
-              end
-            end
-            amn = artifactory_manifest_name # Just using a local iso invoking method_missing repeatedly ... ;)
-            data = { module: amn, data: manifest_data, version: @vars[:build_ver], build: @vars[:build_num], properties: @properties_matrix }
-            tempArtifactFile(amn, data)
-            data[:sha1] = Digest::SHA1.file(data[:file]).hexdigest
-            data[:md5 ] = Digest::MD5.file(data[:file]).hexdigest
-            data[:name] = amn
-            maybeUploadArtifactoryObject(data, amn, data[:version] || @vars[:version], 'properties', '') # -#{@vars[:variant]}
-            @manifest = manifest
-          end
           @vars[:return_code]
         end
 
@@ -144,7 +114,14 @@ module CiCd
           return file_name, file_ext
         end
 
-        def maybeUploadArtifactoryObject(data, artifact_module, artifact_version, file_ext, file_name)
+        # ---------------------------------------------------------------------------------------------------------------
+        def maybeUploadArtifactoryObject(args)
+          data             = args[:data]
+          artifact_module  = args[:artifact_module]
+          artifact_version = args[:artifact_version]
+          file_ext         = args[:file_ext]
+          file_name        = args[:file_name]
+
           artifact_name = getArtifactName(data[:name], file_name, artifact_version, file_ext) # artifact_path = "#{artifactory_org_path()}/#{data[:name]}/#{data[:version]}-#{@vars[:variant]}/#{artifact_name}"
           artifact_path = getArtifactPath(artifact_module, artifact_version, artifact_name)
           objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
@@ -172,6 +149,8 @@ module CiCd
           if data[:temp]
             if File.exists?(data[:file])
               File.unlink(data[:file]) if File.exists?(data[:file])
+              data.delete(:file)
+              data.delete(:temp)
             else
               @logger.warn "Temporary file disappeared: #{data.ai}"
             end
@@ -195,19 +174,12 @@ module CiCd
             else
               @logger.info "Keep existing #{matched.map{|o| o.attributes[:uri]}.join("\t")}"
             end
-            if @manifest[artifact_module].nil?
-              @manifest[artifact_module] = {}
-              file_name = artifact_module
-            else
-              file_name, _ = get_artifact_file_name_ext(data)
-              if file_name.empty?
-                file_name = artifact_module
-              else
-                file_name = "#{artifact_module}#{file_name}"
-              end
-            end
-            @manifest[artifact_module][file_name] = artifact_version
           end
+          args[:data]             = data
+          args[:artifact_module]  = artifact_module
+          args[:artifact_version] = artifact_version
+          args[:file_ext]         = file_ext
+          args[:file_name]        = file_name
 
           @vars[:return_code]
         end

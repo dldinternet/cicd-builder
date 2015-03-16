@@ -36,6 +36,8 @@ module CiCd
       SAVE_LATEST_VARS            = i+=1
       SAVE_ENVIRONMENT_VARS       = i+=1
       NO_ARTIFACTS                = i+=1
+      NO_PROJECT_NAMES            = i+=1
+      NO_PROJECTS_PATH            = i+=1
 
       require 'awesome_print'
 

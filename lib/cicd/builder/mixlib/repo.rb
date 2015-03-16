@@ -37,7 +37,6 @@ module CiCd
       if clazz.is_a?(Class) and not clazz.nil?
         @repo = clazz.new(self)
         @vars[:return_code] = @repo.uploadBuildArtifacts()
-        @vars[:return_code]
       else
         @logger.error "CiCd::Builder::Repo::#{type} is not a valid repo class"
         @vars[:return_code] = Errors::BUILDER_REPO_TYPE
