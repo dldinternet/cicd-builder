@@ -307,6 +307,7 @@ EC2 Instance profile
 
         # ---------------------------------------------------------------------------------------------------------------
         def uploadBuildArtifacts()
+          @logger.info __method__.to_s
           if @vars.has_key?(:build_dir) and @vars.has_key?(:build_pkg)
             artifacts = @vars[:artifacts] rescue []
 
