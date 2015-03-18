@@ -4,7 +4,7 @@ module CiCd
 
 		# ---------------------------------------------------------------------------------------------------------------
 		def checkEnvironment()
-      @logger.info __method__.to_s
+      @logger.step __method__.to_s
 			# [2013-12-30 Christo] Detect CI ...
 			unless ENV.has_key?('JENKINS_HOME')
 				@logger.error "Sorry, your CI environment is not supported at this time (2013-12-30) ... Christo De Lange\n"+
@@ -31,7 +31,7 @@ module CiCd
 
 		# ---------------------------------------------------------------------------------------------------------------
 		def getVars()
-      @logger.info __method__.to_s
+      @logger.step __method__.to_s
 			@vars               ||= {}
 			@vars[:release]     = 'latest'
 			@vars[:build_store] = '/tmp'
@@ -136,7 +136,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def saveBuild()
-      @logger.info __method__.to_s
+      @logger.step __method__.to_s
       begin
         raise 'ERROR: Checksum not read'       unless @vars.has_key?(:latest_sha)
         raise 'ERROR: Checksum not calculated' unless @vars.has_key?(:build_sha)

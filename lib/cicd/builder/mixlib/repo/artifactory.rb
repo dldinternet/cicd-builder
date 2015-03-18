@@ -274,7 +274,7 @@ module CiCd
 
         # ---------------------------------------------------------------------------------------------------------------
         def uploadBuildArtifacts()
-          @logger.info __method__.to_s
+          @logger.step __method__.to_s
           if @vars.has_key?(:build_dir) and @vars.has_key?(:build_pkg)
             begin
               artifacts = @vars[:artifacts] rescue []

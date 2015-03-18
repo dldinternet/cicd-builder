@@ -33,7 +33,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def uploadBuildArtifacts()
-      @logger.info __method__.to_s
+      @logger.step __method__.to_s
       clazz = getRepoClass()
       if clazz.is_a?(Class) and not clazz.nil?
         @repo = clazz.new(self)

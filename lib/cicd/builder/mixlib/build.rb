@@ -31,7 +31,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def prepareBuild()
-      @logger.info __method__.to_s
+      @logger.step __method__.to_s
       meta = {}
       @vars[:return_code] = 0
       %w[ WORKSPACE PROJECT_NAME ].each do |e|
@@ -105,7 +105,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def makeBuild()
-      @logger.info __method__.to_s
+      @logger.step __method__.to_s
       if @vars.has_key?(:build_dir) and @vars.has_key?(:build_pkg)
         begin
           do_build = false
