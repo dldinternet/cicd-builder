@@ -111,6 +111,7 @@ module CiCd
           unless file_ext.empty?
             file_name.gsub!(%r'\.*#{file_ext}$', '')
           end
+          file_name.gsub!(%r'(\.\d+)+$', '')
           return file_name, file_ext
         end
 
