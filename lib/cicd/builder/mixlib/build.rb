@@ -180,6 +180,7 @@ module CiCd
         stat = File.stat(local)
         size = stat.size
       end
+      @logger.debug "Calculate etag to match #{etag}"
       match = etag.match(%r'-(\d+)$')
       check = if match
                 require 's3etag'
@@ -189,13 +190,16 @@ module CiCd
                 part_size = mbs * 1024 * 1024
                 chkit = S3Etag.calc(file: local, threshold: part_size, min_part_size: part_size, max_parts: parts)
                 @logger.debug "S3Etag Calculated #{chkit} : (#{size} / #{part_size}) <= #{parts}"
-                while chkit != etag and (size / part_size) <= parts
+                chunks = size / part_size
+                while chkit != etag and chunks <= parts and chunks > 0 and (size > part_size)
                   # Go one larger if a modulus remains and we have the right number of parts
                   mbs += 1
                   part_size = mbs * 1024 * 1024
+                  chunks = size.to_f / part_size
                   chkit = S3Etag.calc(file: local, threshold: part_size, min_part_size: part_size, max_parts: parts)
                   @logger.debug "S3Etag Calculated #{chkit} : (#{size} / #{part_size}) <= #{parts}"
                 end
+                raise "Unable to match etag #{etag}!" if chkit != etag
                 chkit
               else
                 Digest::MD5.file(local).hexdigest
