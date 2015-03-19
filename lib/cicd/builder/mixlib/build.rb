@@ -199,7 +199,7 @@ module CiCd
                   chkit = S3Etag.calc(file: local, threshold: part_size, min_part_size: part_size, max_parts: parts)
                   @logger.debug "S3Etag Calculated #{chkit} : (#{size} / #{part_size}) <= #{parts}"
                 end
-                raise "Unable to match etag #{etag}!" if chkit != etag
+                @logger.warn "Unable to match etag #{etag}!" if chkit != etag
                 chkit
               else
                 Digest::MD5.file(local).hexdigest
