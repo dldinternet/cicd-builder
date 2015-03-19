@@ -188,11 +188,13 @@ module CiCd
                 mbs = (chunk.to_f / 1024 /1024 + 0.5).to_i
                 part_size = mbs * 1024 * 1024
                 chkit = S3Etag.calc(file: local, threshold: part_size, min_part_size: part_size, max_parts: parts)
+                @logger.debug "S3Etag Calculated #{chkit} : (#{size} / #{part_size}) <= #{parts}"
                 while chkit != etag and (size / part_size) <= parts
                   # Go one larger if a modulus remains and we have the right number of parts
                   mbs += 1
                   part_size = mbs * 1024 * 1024
                   chkit = S3Etag.calc(file: local, threshold: part_size, min_part_size: part_size, max_parts: parts)
+                  @logger.debug "S3Etag Calculated #{chkit} : (#{size} / #{part_size}) <= #{parts}"
                 end
                 chkit
               else
