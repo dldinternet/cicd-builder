@@ -104,6 +104,7 @@ module CiCd
           if file_name =~ %r'^#{data[:name]}'
             file_name.gsub!(%r'^#{data[:name]}\.*', '')
           end
+          file_name.gsub!(%r'\.\.+','.')
           file_name.gsub!(%r'\.*-*#{data[:version]}', '')
           file_name.gsub!(%r'\.*-*#{data[:build]}-*', '')
           file_ext = file_name.dup
