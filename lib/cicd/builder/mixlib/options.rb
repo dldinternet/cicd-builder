@@ -14,7 +14,7 @@ module CiCd
 			opt_parser = OptionParser.new do |opts|
 				opts.banner = "Usage: #{MYNAME} [@options]"
 
-				opts.on('-l', '--log_level LEVEL', '--log-level LEVEL', [:trace, :debug, :info, :note, :warn, :error, :fatal, :todo], 'Log level ([:trace, :debug, :info, :step, :warn, :error, :fatal, :todo])') do |v|
+				opts.on('-l', '--log_level LEVEL', '--log-level LEVEL', [:trace, :debug, :info, :step, :warn, :error, :fatal, :todo], 'Log level ([:trace, :debug, :info, :step, :warn, :error, :fatal, :todo])') do |v|
 					@options[:log_level] = v
 				end
 				opts.on('-f', '--inifile FILE', 'INI file with settings') do |v|
