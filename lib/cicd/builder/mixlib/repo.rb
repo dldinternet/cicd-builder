@@ -32,17 +32,35 @@ module CiCd
     end
 
     # ---------------------------------------------------------------------------------------------------------------
-    def uploadBuildArtifacts()
+    def performOnRepoInstance(verb)
       @logger.step __method__.to_s
       clazz = getRepoClass()
       if clazz.is_a?(Class) and not clazz.nil?
         @repo = clazz.new(self)
-        @vars[:return_code] = @repo.uploadBuildArtifacts()
+        method = @repo.method(verb)
+        if method.owner == clazz
+          @vars[:return_code] = @repo.send(verb)
+        else
+          @logger.error "#{clazz.name.to_s} cannot do action #{verb}"
+          @vars[:return_code] = Errors::BUILDER_REPO_ACTION
+        end
       else
-        @logger.error "CiCd::Builder::Repo::#{type} is not a valid repo class"
+        @logger.error "#{clazz.name.to_s} is not a valid repo class"
         @vars[:return_code] = Errors::BUILDER_REPO_TYPE
       end
       @vars[:return_code]
+    end
+
+    # ---------------------------------------------------------------------------------------------------------------
+    def uploadBuildArtifacts()
+      @logger.step __method__.to_s
+      performOnRepoInstance(__method__.to_s)
+    end
+
+    # ---------------------------------------------------------------------------------------------------------------
+    def pruneRepo()
+      @logger.step __method__.to_s
+			performOnRepoInstance(__method__.to_s)
     end
 
     # ---------------------------------------------------------------------------------------------------------------

@@ -39,6 +39,15 @@ module CiCd
       NO_PROJECT_NAMES            = i+=1
       NO_PROJECTS_PATH            = i+=1
       TEMP_FILE_MISSING           = i+=1
+      PRUNE_BAD_REPO              = i+=1
+      PRUNE_NO_TREE               = i+=1
+      PRUNE_NO_VARIANT            = i+=1
+      PRUNE_NO_PRUNER             = i+=1
+      PRUNE_TOO_OLD               = i+=1
+      PRUNE_VARIANT_MIA           = i+=1
+      PRUNE_BAD_BRANCH            = i+=1
+      PRUNE_BAD_VERSION           = i+=1
+      PRUNE_BAD_PRUNER            = i+=1
 
       require 'awesome_print'
 

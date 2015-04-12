@@ -68,11 +68,18 @@ module CiCd
 				setup()
 
         ret = 0
-				%w(checkEnvironment getVars prepareBuild makeBuild saveBuild uploadBuildArtifacts).each do |step|
+				%w(checkEnvironment getVars).each do |step|
           @logger.step "#{step}"
           ret = send(step)
           break unless ret == 0
-        end
+				end
+				if ret == 0
+					@vars[:actions].each do |step|
+						@logger.step "#{step}"
+						ret = send(step)
+						break unless ret == 0
+					end
+				end
 
 				@vars[:return_code]
 			end

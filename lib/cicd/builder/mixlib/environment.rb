@@ -38,7 +38,8 @@ module CiCd
 			@vars[:variant]     = 'SNAPSHOT'
 
 			if ENV.has_key?('PROJECT_NAME')
-				@vars[:project_name] = ENV['PROJECT_NAME']
+        @vars[:product] =
+        @vars[:project_name] = ENV['PROJECT_NAME']
 			end
 
 			if ENV.has_key?('RELEASE')
@@ -63,6 +64,10 @@ module CiCd
 				@vars[:build_store] = "#{ENV['BUILD_STORE']}"
 			end
 
+			if ENV.has_key?('BRANCH')
+				@vars[:branch] = "#{ENV['BRANCH']}"
+      end
+
 			if ENV.has_key?('VARIANT')
 				@vars[:variant] = "#{ENV['VARIANT']}"
       end
@@ -71,7 +76,21 @@ module CiCd
 				@vars[:build_num] = "#{ENV['BUILD_NUMBER']}"
 			end
 
-			@vars[:return_code] = getLatest()
+      if ENV.has_key?('ACTIONS')
+        @vars[:actions] = ENV['ACTIONS'].split(%r'[, \t]+')
+      else
+        @vars[:actions] = %w(prepareBuild makeBuild saveBuild uploadBuildArtifacts)
+      end
+
+      if ENV.has_key?('TREE')
+        @vars[:tree] = ENV['TREE']
+      end
+
+      if ENV.has_key?('PRUNER')
+        @vars[:pruner] = ENV['PRUNER']
+      end
+
+      @vars[:return_code] = getLatest()
 		end
 
     # ---------------------------------------------------------------------------------------------------------------
