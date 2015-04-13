@@ -58,6 +58,12 @@ module CiCd
     end
 
     # ---------------------------------------------------------------------------------------------------------------
+    def analyzeInventory()
+      @logger.step __method__.to_s
+			performOnRepoInstance(__method__.to_s)
+    end
+
+    # ---------------------------------------------------------------------------------------------------------------
     def pruneInventory()
       @logger.step __method__.to_s
 			performOnRepoInstance(__method__.to_s)

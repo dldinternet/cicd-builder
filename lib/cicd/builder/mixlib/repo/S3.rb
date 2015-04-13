@@ -545,6 +545,21 @@ EC2 Instance profile
           [ others, ours ].flatten.sort_by{ |b| b['build_number'] }
         end
 
+        def version(builds, pruner)
+          rel = pruner.shift
+          raise "Bad syntax: #{__method__}{ #{pruner.join(' ')}" unless (pruner.size >= 3)
+          others = builds.select { |bld|
+            ver = _getMatches(@vars, bld['build_name'], :version)
+            ver != rel
+          }
+          ours = builds.select { |bld|
+            ver = _getMatches(@vars, bld['build_name'], :version)
+            ver == rel
+          }
+          ours = prune ours, pruner
+          [ others, ours ].flatten.sort_by{ |b| b['build_number'] }
+        end
+
         def first(builds, pruner)
           raise "Bad syntax: #{__method__}{ #{pruner.join(' ')}" unless pruner.size == 1
           count = pruner[0].to_i
@@ -584,6 +599,82 @@ EC2 Instance profile
           else
             builds
           end
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def analyzeInventory()
+          @logger.step __method__.to_s
+          # Read and parse in JSON
+          key, json, over = pullInventory()
+          if json.nil?
+            @logger.error "Bad repo/inventory specified. s3://#{ENV['AWS_S3_BUCKET']}/#{key}"
+            @vars[:return_code] = Errors::PRUNE_BAD_REPO
+          else
+            if @vars[:variant]
+              if @vars[:tree]
+                if @vars[:pruner]
+                  if json['container'] and json['container']['variants']
+                    # but does not have our variant ...
+                    variants = json['container']['variants']
+                    variants.each do |variant,varianth|
+                      # If the inventory 'latest' format is up to date ...
+                      if varianth['latest'] and varianth['latest'].is_a?(Hash)
+                        puts "Variant: #{variant}"
+                        puts "\t#{varianth['builds'].size} builds"
+                        puts "\t#{varianth['branches'].size} branches:\n#{varianth['branches'].ai}"
+                        # puts "\t#{varianth['versions'].size} versions:\n#{varianth['versions'].ai}"
+                        versions = {}
+                        releases = {}
+                        versrels = {}
+                        bmin = -1
+                        bmax = -1
+                        varianth['builds'].each do |bld|
+                          releases[bld['release']] ||= 0
+                          releases[bld['release']] += 1
+                          unless bld['build_number'].nil?
+                            bnum = bld['build_number'].to_i
+                            if bmin < 0 or bnum < bmin
+                              bmin = bnum
+                            end
+                            if bnum > bmax
+                              bmax = bnum
+                            end
+                          end
+                          ver = _getMatches(@vars, bld['build_name'], :version)
+                          versions[ver] ||= 0
+                          versions[ver] += 1
+                          versrels["#{ver}-#{bld['release']}"] ||= 0
+                          versrels["#{ver}-#{bld['release']}"] += 1
+                        end
+                        puts "\t#{versions.size} versions:\n#{versions.ai}"
+                        puts "\t#{releases.size} releases:\n#{releases.ai}"
+                        puts "\t#{versrels.size} version-releases:\n#{versrels.ai}"
+                        puts "\tBuilds: Min: #{bmin}, Max: #{bmax}"
+                      else
+                        # Start over ... too old/ incompatible
+                        @logger.error 'Repo too old or incompatible to prune. No [container][variants][VARIANT][latest].'
+                        @vars[:return_code] = Errors::PRUNE_TOO_OLD
+                      end
+                    end
+                  else
+                    # Start over ... too old/ incompatible
+                    @logger.error 'Repo too old or incompatible to prune. No [container][variants].'
+                    @vars[:return_code] = Errors::PRUNE_TOO_OLD
+                  end
+                else
+                  @logger.error "No 'PRUNER' specified"
+                  @vars[:return_code] = Errors::PRUNE_NO_PRUNER
+                end
+              else
+                @logger.error "No 'TREE' specified"
+                @vars[:return_code] = Errors::PRUNE_NO_TREE
+              end
+            else
+              @logger.error "No 'VARIANT' specified"
+              @vars[:return_code] = Errors::PRUNE_NO_VARIANT
+            end
+          end
+          @vars[:return_code]
         end
 
         # ---------------------------------------------------------------------------------------------------------------
