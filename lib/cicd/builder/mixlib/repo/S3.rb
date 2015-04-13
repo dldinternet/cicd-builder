@@ -190,24 +190,15 @@ EC2 Instance profile
             raise CiCd::Builder::Errors::Internal.new sprintf('Internal logic error! %s::%d', __FILE__,__LINE__) if varianth.nil?
             # Add the new build if we don't have it
             unless varianth['builds'].map { |b| b['build_name'] }.include?(@vars[:build_nmn])
-              #noinspection RubyStringKeysInHashInspection
-              filing = {
-                  'drawer'        => @vars[:build_nam],
-                  'build_name'    => @vars[:build_nmn],
-                  'build_number'  => @vars[:build_num],
-                  'release'       => @vars[:release],
-              }
-              if @vars.has_key?(:artifacts)
-                filing['artifacts'] = @vars[:artifacts].map { |artifact| File.basename(artifact[:key]) }
-              end
-              assembly = json['container']['assembly'] or raise("Expected an 'assembly'")
-              if assembly['extension'] != !vars[:build_ext]
-                # noinspection RubyStringKeysInHashInspection
-                filing['assembly'] = {
-                    'extension' => @vars[:build_ext],
-                    'type'      => 'tarbzip2'
-                }
-              end
+              # noinspection RubyStringKeysInHashInspection
+              filing = _createFiling(json, {
+                                             'drawer'        => @vars[:build_nam],
+                                             'build_name'    => @vars[:build_nmn],
+                                             'build_number'  => @vars[:build_num],
+                                             'release'       => @vars[:release],
+                                             'artifacts'     => @vars[:artifacts],
+                                             'build_ext'     => @vars[:build_ext],
+                                         } )
               varianth['builds'] << filing
             end
             build_lst = (varianth['builds'].size-1)
@@ -229,6 +220,28 @@ EC2 Instance profile
             json_s = JSON.pretty_generate( json, { indent: "\t", space: ' '})
           end
           pushInventory(json_s, key)
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        # noinspection RubyStringKeysInHashInspection
+        def _createFiling(json, args)
+          filing = {
+              'drawer'        => args['drawer'],
+              'build_name'    => args['build_name'],
+              'build_number'  => args['build_number'],
+              'release'       => args['release'],
+          }
+          if args['artifacts']
+            filing['artifacts'] = args['artifacts'].map { |artifact| File.basename(artifact[:key]) }
+          end
+          assembly = json['container']['assembly'] or raise("Expected an 'assembly'")
+          if assembly['extension'] != args['build_ext']
+            filing['assembly'] = {
+                'extension' => args['build_ext'],
+                'type'      => 'tarbzip2'
+            }
+          end
+          filing
         end
 
         def pushInventory(json_s, key)
@@ -272,7 +285,7 @@ EC2 Instance profile
         def _getLatestBranch(build_lst, varianth)
           # noinspection RubyHashKeysTypesInspection
           map = Hash[varianth['branches'].map.with_index.to_a]
-          build_bra = map[_getBranch(@vars, varianth['builds'][build_lst])]
+          build_bra = (varianth['builds'].size > 0) ? map[_getBranch(@vars, varianth['builds'][build_lst])] : -1
 
           i = -1
           varianth['builds'].each { |h|
@@ -291,9 +304,14 @@ EC2 Instance profile
         def _getLatestVersion(build_lst, varianth)
           # noinspection RubyHashKeysTypesInspection
           map = Hash[varianth['versions'].map.with_index.to_a]
-          build_ver = map[_getVersion(@vars, varianth['builds'][build_lst])]
+          if varianth['builds'].size > 0
+            build_ver = map[_getVersion(@vars, varianth['builds'][build_lst])]
+            verl = _getVersion(@vars, varianth['builds'][build_ver])
+          else
+            build_ver = -1
+            verl = '0.0.0'
+          end
 
-          verl = _getVersion(@vars, varianth['builds'][build_ver])
           gt   = ::Semverse::Constraint.new "> #{verl}"
           eq   = ::Semverse::Constraint.new "= #{verl}"
 
@@ -441,7 +459,6 @@ EC2 Instance profile
           args = args.dup
           args[:version] = '[0-9\.]+'
           args[:release] = '[0-9\.]+'
-          args[:branch]  = '[^-]+'
           args[:build]   = '\d+'
           map = [ :product,:version,:branch,:build ]
           matches = name.match(/^(#{args[:product]})-(#{args[:version]})-(#{args[:branch]})-build-(\d+)$/)
@@ -452,22 +469,27 @@ EC2 Instance profile
               map = [ :product,:version,:release,:branch,:variant,:build ]
               matches = name.match(/^(#{args[:product]})-(#{args[:version]})-release-(#{args[:release]})-(#{args[:branch]})-(#{args[:variant]})-build-(\d+)$/)
               unless matches
+                args[:branch]  = '[^-]+'
+                args[:variant] = '[^-]+'
                 name = name.dup
                 map.each { |key|
-                  if key == match
-                    break
-                  elsif key == :release
+                  if key == :release
                     name.gsub!(/^release-/, '')
                   elsif key == :build
                     name.gsub!(/^build-/, '')
                   end
-                  name.gsub!(/^#{args[key]}-/, '')
+                  if key == match
+                    break
+                  end
+                  # name.gsub!(/^#{args[key]}-/, '')
+                  name.gsub!(/^[^\-]+-/, '')
                 }
                 map.reverse.each { |key|
                   if key == match
                     break
                   end
-                  name.gsub!(/-#{args[key]}$/, '')
+                  #name.gsub!(/-#{args[key]}$/, '')
+                  name.gsub!(/-[^\-]+$/, '')
                   if key == :release
                     name.gsub!(/-release$/, '')
                   elsif key == :build
@@ -508,6 +530,19 @@ EC2 Instance profile
         def _getBranch(args,drawer, naming = nil)
           name = drawer['build_name'] rescue drawer['build']
           drawer['branch'] || _getMatches(args, name, :branch)
+        end
+
+        def release(builds, pruner)
+          rel = pruner.shift
+          raise "Bad syntax: #{__method__}{ #{pruner.join(' ')}" unless (pruner.size >= 3)
+          others = builds.select { |bld|
+            bld['release'] != rel
+          }
+          ours = builds.select { |bld|
+            bld['release'] == rel
+          }
+          ours = prune ours, pruner
+          [ others, ours ].flatten.sort_by{ |b| b['build_number'] }
         end
 
         def first(builds, pruner)
@@ -552,7 +587,7 @@ EC2 Instance profile
         end
 
         # ---------------------------------------------------------------------------------------------------------------
-        def pruneRepo()
+        def pruneInventory()
           @logger.step __method__.to_s
           # Read and parse in JSON
           key, json, over = pullInventory()
@@ -575,44 +610,41 @@ EC2 Instance profile
                         versions  = varianth['versions']
                         case @vars[:tree]
                         when %r'variants?'
-                          variants.delete(@vars[:pruner])
+                          @vars[:pruner].split(/,\s*/).each do |pruner|
+                            variants.delete(pruner)
+                          end
                         when %r'versions?'
-                          if varianth['versions'].include?(@vars[:pruner])
-                            survivors = builds.select{ |drawer|
-                              ver = _getVersion(@vars, drawer)
-                              ver != @vars[:pruner]
-                            }
-                            varianth['builds']   = survivors
-                            varianth['versions'] = varianth['versions'].select{|ver| ver != @vars[:pruner] }
-                          else
-                            @logger.error "Cannot prune the version '#{@vars[:pruner]}' from variant '#{@vars[:variant]}'"
-                            @vars[:return_code] = Errors::PRUNE_BAD_VERSION
+                          @vars[:pruner].split(/,\s*/).each do |pruner|
+                            if varianth['versions'].include?(pruner)
+                              survivors = varianth['builds'].select{ |drawer|
+                                ver = _getVersion(@vars, drawer)
+                                ver != pruner
+                              }
+                              varianth['builds']   = survivors
+                              varianth['versions'] = varianth['versions'].select{|ver| ver != pruner }
+                            else
+                              @logger.error "Cannot prune the version '#{pruner}' from variant '#{@vars[:variant]}'"
+                              @vars[:return_code] = Errors::PRUNE_BAD_VERSION
+                            end
                           end
                         when %r'branch(|es)'
-                          if varianth['branches'].include?(@vars[:pruner])
-                            survivors = builds.select{ |drawer|
-                              bra = _getBranch(@vars, drawer)
-                              bra != @vars[:pruner]
-                            }
-                            varianth['builds']   = survivors
-                            varianth['branches'] = varianth['branches'].select{|bra| bra != @vars[:pruner] }
-                          else
-                            @logger.error "Cannot prune the branch '#{@vars[:pruner]}' from variant '#{@vars[:variant]}'"
-                            @vars[:return_code] = Errors::PRUNE_BAD_BRANCH
+                          @vars[:pruner].split(/,\s*/).each do |pruner|
+                            if varianth['branches'].include?(pruner)
+                              survivors = varianth['builds'].select{ |drawer|
+                                bra = _getBranch(@vars, drawer)
+                                bra != pruner
+                              }
+                              varianth['builds'] = survivors
+                            else
+                              @logger.error "Cannot prune the branch '#{pruner}' from variant '#{@vars[:variant]}'"
+                              @vars[:return_code] = Errors::PRUNE_BAD_BRANCH
+                            end
                           end
                         when %r'builds?'
                           # noinspection RubyHashKeysTypesInspection
                           begin
                             builds = prune(builds, @vars[:pruner].split(/\s+/))
                             varianth['builds']   = builds
-                            branches = builds.map{ |bld|
-                              _getBranch(@vars, bld)
-                            }
-                            varianth['branches'] = Hash[branches.map.with_index.to_a].keys
-                            versions = builds.map{ |bld|
-                              _getVersion(@vars, bld)
-                            }
-                            varianth['versions'] = Hash[versions.map.with_index.to_a].keys
                           rescue Exception => e
                             @logger.error "Cannot prune the builds '#{e.message}'"
                             @vars[:return_code] = Errors::PRUNE_BAD_PRUNER
@@ -622,20 +654,9 @@ EC2 Instance profile
                           @vars[:return_code] = Errors::PRUNE_NO_TREE
                         end
                         if 0 == @vars[:return_code]
-                          build_lst = (varianth['builds'].size-1)
-                          build_rel = _getLatestRelease(build_lst, varianth)
-                          # Latest branch ...
-                          build_bra = _getLatestBranch(build_lst, varianth)
-                          # Latest version ...
-                          build_ver = _getLatestVersion(build_lst, varianth)
-
-                          # Set latest
-                          varianth['latest'] = {
-                              branch:  build_bra,
-                              version: build_ver,
-                              build:   build_lst,
-                              release: build_rel,
-                          }
+                          _updateBranches(varianth['builds'], varianth)
+                          _updateVersions(varianth['builds'], varianth)
+                          _updateLatest(varianth)
                           json_s = JSON.pretty_generate( json, { indent: "\t", space: ' '})
                           pushInventory(json_s, key)
                         end
@@ -669,7 +690,286 @@ EC2 Instance profile
           @vars[:return_code]
         end
 
-        private :_update, :checkForInventory, :pullInventory
+        # ---------------------------------------------------------------------------------------------------------------
+        def syncRepo()
+          @logger.step __method__.to_s
+          # Read and parse in JSON
+          key, json, over = pullInventory()
+          # Starting fresh ?
+          if over or json.nil?
+            # json_s = initInventory()
+            @logger.error "Bad repo/inventory found (s3://#{ENV['AWS_S3_BUCKET']}/#{key}). Inventory may need to be initialized."
+            @vars[:return_code] = Errors::SYNC_BAD_REPO
+          else
+            if json['container'] and json['container']['variants']
+              variants = json['container']['variants']
+              list = pullRepo()
+              s3 = getS3()
+
+              list.each do |obj|
+                @logger.debug "Inspect #{obj[:key]}"
+                delete = false
+                unless obj[:key].match(%r'#{key}$')
+                  item = obj[:key].dup
+                  if item.match(%r'^#{@vars[:product]}')
+                    item.gsub!(%r'^#{@vars[:product]}/', '')
+                    matches = item.match(%r'^([^/]+)/')
+                    if matches
+                      variant   = matches[1]
+                      if variants.has_key?(variant)
+                        varianth = variants[variant]
+                        item.gsub!(%r'^#{variant}/', '')
+                        matches = item.match(%r'^([^/]+)/')
+                        if matches
+                          drawer = matches[1]
+                          builds = varianth['builds'].select{ |bld|
+                            bld['drawer'].eql?(drawer)
+                          }
+                          if builds.size > 0
+                            item.gsub!(%r'^#{drawer}/', '')
+
+                            if item.match(%r'^#{drawer}')
+                              name = item.gsub(%r'\.(MANIFEST\.json|tar\.[bg]z2?|tgz|tbz2?|checksum)$', '')
+                              ver = _getMatches(@vars, name, :version)
+                              rel = _getMatches(@vars, name, :release)
+                              bra = _getMatches(@vars, name, :branch)
+                              var = _getMatches(@vars, name, :variant)
+                              num = _getMatches(@vars, name, :build)
+                              # num = num.to_i unless num.nil?
+                              #@logger.debug "Variant: #{var}, Version: #{ver}, Branch: #{bra}"
+                              unless varianth['versions'].include?(ver) and varianth['branches'].include?(bra) and var.eql?(variant)
+                                delete = true
+                              else
+                                builds = varianth['builds'].select{ |bld|
+                                  bld['build_name'].eql?(name)
+                                }
+                                if builds.size > 0
+                                  builds = varianth['builds'].select{ |bld|
+                                    bld['release'].eql?(rel)
+                                  }
+                                  if builds.size > 0
+                                    builds = varianth['builds'].select{ |bld|
+                                      bld['build_number'] == num
+                                    }
+                                    unless builds.size > 0
+                                      delete = true
+                                    end
+                                  else
+                                    delete = true
+                                  end
+                                else
+                                  delete = true
+                                end
+                              end
+                            end
+                          else
+                            delete = true
+                          end
+                        else
+                          @logger.warn "Item #{item} drawer cannot be identified!"
+                          @vars[:return_code] = Errors::SYNC_NO_DRAWER
+                          break
+                        end
+                      else
+                        delete = true
+                      end
+                    else
+                      @logger.warn "Item #{item} variant cannot be identified!"
+                      @vars[:return_code] = Errors::SYNC_NO_VARIANT
+                      break
+                    end
+                  else
+                    @logger.warn "Item #{item} is not our product(#{@vars[:product]})"
+                    @vars[:return_code] = Errors::SYNC_BAD_PRODUCT
+                    break
+                  end
+                  if delete
+                    @logger.info "S3 Delete #{ENV['AWS_S3_BUCKET']}, #{obj[:key]}"
+                    resp = s3.delete_object(bucket: ENV['AWS_S3_BUCKET'], key: obj[:key])
+                    if resp
+                      @logger.info "Version: #{resp[:version_id]}" if resp[:version_id]
+                    end
+                  end
+                end
+              end
+            else
+              @logger.error "Bad repo/inventory found (s3://#{ENV['AWS_S3_BUCKET']}/#{key}). Inventory may need to be initialized."
+              @vars[:return_code] = Errors::SYNC_BAD_REPO
+            end
+          end
+          @vars[:return_code]
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def syncInventory()
+          @logger.step __method__.to_s
+          # Read and parse in JSON
+          key, json, over = pullInventory()
+          # Starting fresh ?
+          if over or json.nil?
+            # json_s = initInventory()
+            @logger.error "Bad repo/inventory found (s3://#{ENV['AWS_S3_BUCKET']}/#{key}). Inventory may need to be initialized."
+            @vars[:return_code] = Errors::SYNC_BAD_REPO
+          else
+            list = pullRepo()
+
+            fileroom = {}
+            list.each do |obj|
+              unless obj[:key].match(%r'#{key}$')
+                item      = obj[:key].dup
+                if item.match(%r'^#{@vars[:product]}')
+                  item.gsub!(%r'^#{@vars[:product]}/', '')
+                  matches = item.match(%r'^([^/]+)/')
+                  if matches
+                    variant   = matches[1]
+                    fileroom[variant] ||= {}
+                    cabinet = fileroom[variant]
+                    item.gsub!(%r'^#{variant}/', '')
+                    matches = item.match(%r'^([^/]+)/')
+                    if matches
+                      drawer = matches[1]
+                      item.gsub!(%r'^#{drawer}/', '')
+                      cabinet[drawer] ||= {}
+                      tray = cabinet[drawer]
+                      # tray['builds'] ||= {}
+
+                      if item.match(%r'^#{drawer}')
+                        name = item.gsub(%r'\.(MANIFEST\.json|tar\.[bg]z2?|tgz|tbz2?|checksum)$', '')
+                        ext  = item.gsub(%r'\.(tar\.[bg]z2?)$', '$1')
+                        ext  = 'tar.bz2' if ext == item
+                        ver = _getMatches(@vars, name, :version)
+                        rel = _getMatches(@vars, name, :release)
+                        bra = _getMatches(@vars, name, :branch)
+                        var = _getMatches(@vars, name, :variant)
+                        bld = _getMatches(@vars, name, :build)
+                        tray[name] ||= {}
+                        filing = tray[name]
+
+                        unless filing.size > 0
+                          # noinspection RubyStringKeysInHashInspection
+                          filing = _createFiling(json, {
+                                                         'drawer'        => drawer,
+                                                         'build_name'    => name,
+                                                         'build_number'  => bld,
+                                                         'release'       => rel,
+                                                         'artifacts'     => [obj],
+                                                         'build_ext'     => ext,
+                                                     } )
+                          tray[name] = filing
+                          @logger.debug "Filing: #{filing.ai}"
+                        else
+                          filing['artifacts'] << item # File.basename(obj[:key])
+                        end
+                      else
+                        # Add the artifact to all filings in this drawer :)
+                        tray.each do |name,filing|
+                          unless filing['drawer'] == drawer
+                            @logger.error "#{obj[:key]} belongs in drawer '#{drawer}' which does not match the filings drawer '#{filing['drawer']}'"
+                            @vars[:return_code] = Errors::SYNC_NO_DRAWER
+                            return @vars[:return_code]
+                          end
+                          filing['artifacts'] << item # File.basename(obj[:key])
+                        end
+                      end
+                    else
+                      @logger.warn "Item #{item} drawer cannot be identified!"
+                      @vars[:return_code] = Errors::SYNC_NO_DRAWER
+                      break
+                    end
+                  else
+                    @logger.warn "Item #{item} variant cannot be identified!"
+                    @vars[:return_code] = Errors::SYNC_NO_VARIANT
+                    break
+                  end
+                else
+                  @logger.warn "Item #{item} is not our product(#{@vars[:product]})"
+                  @vars[:return_code] = Errors::SYNC_BAD_PRODUCT
+                  break
+                end
+              end
+            end
+            variants  = {}
+            fileroom.each do |variant,cabinet|
+              variants[variant]    ||= {}
+              varianth = variants[variant]
+              varianth['builds']   ||= []
+              varianth['branches'] ||= []
+              varianth['versions'] ||= []
+              cabinet.each do |drawer,tray|
+                varianth['builds'] << tray.values.sort_by{ |bld| bld['build_number'].to_i }
+                varianth['builds'] = varianth['builds'].flatten
+                _updateBranches(varianth['builds'], varianth)
+                _updateVersions(varianth['builds'], varianth)
+                _updateLatest(varianth)
+              end
+            end
+            if json['container'] and json['container']['variants']
+              json['container']['variants'] = variants
+              json_s = JSON.pretty_generate( json, { indent: "\t", space: ' '})
+              pushInventory(json_s, key)
+            end
+          end
+          @vars[:return_code]
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def pullRepo()
+          list = []
+          s3from = getS3()
+          resp = s3from.list_objects(bucket: ENV['AWS_S3_BUCKET'], prefix: @vars[:project_name],)
+          if resp and (not resp[:contents].nil?) and resp[:contents].is_a?(Array) and resp[:contents].size > 0
+            list << resp[:contents]
+            @logger.info "Prefix #{@vars[:project_name]} List size: #{list.flatten.size}"
+            if resp[:is_truncated]
+              while resp and (not resp[:contents].nil?) and resp[:contents].is_a?(Array) and resp[:contents].size > 0
+                resp = s3from.list_objects(bucket: ENV['AWS_S3_BUCKET'], prefix: @vars[:project_name], marker: resp[:contents][-1][:key])
+                list << resp[:contents] if resp and resp[:contents]
+                @logger.info "Prefix #{@vars[:project_name]} List size: #{list.flatten.size}"
+              end
+            end
+            list.flatten!
+          end
+          @logger.info "Repo size: #{list.size}"
+          list
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def _updateLatest(varianth)
+          build_lst = (varianth['builds'].size-1)
+          build_rel = _getLatestRelease(build_lst, varianth)
+          # Latest branch ...
+          build_bra = _getLatestBranch(build_lst, varianth)
+          # Latest version ...
+          build_ver = _getLatestVersion(build_lst, varianth)
+
+          # Set latest
+          varianth['latest'] = {
+              branch: build_bra,
+              version: build_ver,
+              build: build_lst,
+              release: build_rel,
+          }
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def _updateVersions(builds, varianth)
+          versions = builds.map { |bld|
+            _getVersion(@vars, bld)
+          }
+          # noinspection RubyHashKeysTypesInspection
+          varianth['versions'] = Hash[versions.map.with_index.to_a].keys
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def _updateBranches(builds, varianth)
+          branches = builds.map { |bld|
+            _getBranch(@vars, bld)
+          }
+          # noinspection RubyHashKeysTypesInspection
+          varianth['branches'] = Hash[branches.map.with_index.to_a].keys
+        end
+
+        private :_update, :checkForInventory, :pullInventory, :_update, :_updateBranches, :_updateLatest, :_updateVersions
 
       end
     end

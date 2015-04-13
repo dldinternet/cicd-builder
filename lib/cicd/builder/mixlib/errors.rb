@@ -48,6 +48,10 @@ module CiCd
       PRUNE_BAD_BRANCH            = i+=1
       PRUNE_BAD_VERSION           = i+=1
       PRUNE_BAD_PRUNER            = i+=1
+      SYNC_BAD_REPO               = i+=1
+      SYNC_BAD_PRODUCT            = i+=1
+      SYNC_NO_VARIANT             = i+=1
+      SYNC_NO_DRAWER              = i+=1
 
       require 'awesome_print'
 
