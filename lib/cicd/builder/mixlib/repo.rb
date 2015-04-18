@@ -38,11 +38,14 @@ module CiCd
       if clazz.is_a?(Class) and not clazz.nil?
         @repo = clazz.new(self)
         method = @repo.method(verb)
-        if method.owner == clazz
-          @vars[:return_code] = @repo.send(verb)
-        else
-          @logger.error "#{clazz.name.to_s} cannot do action #{verb}"
-          @vars[:return_code] = Errors::BUILDER_REPO_ACTION
+        unless method.owner == clazz
+          if @repo.respond_to?(verb)
+            @logger.warn "#{clazz.name.to_s} does not override action #{verb}"
+            @vars[:return_code] = @repo.send(verb)
+          else
+            @logger.error "#{clazz.name.to_s} does not implement action #{verb}"
+            @vars[:return_code] = Errors::BUILDER_REPO_ACTION
+          end
         end
       else
         @logger.error "#{clazz.name.to_s} is not a valid repo class"
