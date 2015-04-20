@@ -33,19 +33,22 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def performOnRepoInstance(verb)
-      @logger.step __method__.to_s
+      @logger.step __method__.to_s + ' ' + verb
       clazz = getRepoClass()
       if clazz.is_a?(Class) and not clazz.nil?
         @repo = clazz.new(self)
         method = @repo.method(verb)
-        unless method.owner == clazz
-          if @repo.respond_to?(verb)
+        if @repo.respond_to?(verb)
+          unless method.owner == clazz
             @logger.warn "#{clazz.name.to_s} does not override action #{verb}"
-            @vars[:return_code] = @repo.send(verb)
-          else
-            @logger.error "#{clazz.name.to_s} does not implement action #{verb}"
-            @vars[:return_code] = Errors::BUILDER_REPO_ACTION
+          # else
+          #   @logger.error "#{clazz.name.to_s} does not implement action #{verb}"
+          #   @vars[:return_code] = Errors::BUILDER_REPO_ACTION
           end
+          @vars[:return_code] = @repo.send(verb)
+        else
+          @logger.fatal "'#{verb}' not implemented!"
+          @vars[:return_code] = Errors::BUILDER_REPO_ACTION
         end
       else
         @logger.error "#{clazz.name.to_s} is not a valid repo class"
