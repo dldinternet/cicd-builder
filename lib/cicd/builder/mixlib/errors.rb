@@ -33,6 +33,7 @@ module CiCd
       BUCKET                      = i+=1
       BAD_ARTIFACTS               = i+=1
       ARTIFACT_NOT_FOUND          = i+=1
+      ARTIFACT_CHECKSUM_BAD       = i+=1
       SAVE_LATEST_VARS            = i+=1
       SAVE_ENVIRONMENT_VARS       = i+=1
       NO_ARTIFACTS                = i+=1
