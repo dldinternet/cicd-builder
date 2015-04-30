@@ -319,13 +319,15 @@ module CiCd
           thread = Thread.new(){
             yield
           }
-          progressbar = ::ProgressBar.create({title: title, progress_mark: '=', starting_at: 0, total: limit, remainder_mark: '.', throttle_rate: 0.5})
+          progressbar = ::ProgressBar.create({title: title, progress_mark: '=', starting_at: 0, total: limit, remainder_mark: '.', throttle_rate: 0.5}) if @logger.info?
           limit.times do
             res = thread.join(1)
-            progressbar.increment
-            progressbar.total = limit
+            if @logger.info?
+              progressbar.increment
+              progressbar.total = limit
+            end
             unless thread.alive? #or thread.stop?
-              puts ''
+              puts '' if @logger.info?
               break
             end
           end
