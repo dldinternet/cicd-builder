@@ -339,9 +339,9 @@ EC2 Instance profile
         end
 
         # ---------------------------------------------------------------------------------------------------------------
-        def pullInventory()
+        def pullInventory(product=nil)
           json = nil
-          key, s3_obj = checkForInventory()
+          key, s3_obj = checkForInventory(product)
           # If the inventory has started then add to it else create a new one
           if s3_obj.nil?
             # Start a new inventory
@@ -370,8 +370,11 @@ EC2 Instance profile
         end
 
         # ---------------------------------------------------------------------------------------------------------------
-        def checkForInventory
-          key = "#{@vars[:project_name]}/INVENTORY.json"
+        def checkForInventory(product=nil)
+          if product.nil?
+            product = @vars[:project_name]
+          end
+          key = "#{product}/INVENTORY.json"
           s3_obj = maybeS3Object(key)
           return key, s3_obj
         end
@@ -406,7 +409,7 @@ EC2 Instance profile
 
         # ---------------------------------------------------------------------------------------------------------------
         def uploadBuildArtifacts()
-          @logger.step __method__.to_s
+          @logger.step CLASS+'::'+__method__.to_s
           if @vars.has_key?(:build_dir) and @vars.has_key?(:build_pkg)
             artifacts = @vars[:artifacts] rescue []
 
@@ -623,29 +626,7 @@ EC2 Instance profile
                         puts "\t#{varianth['builds'].size} builds"
                         puts "\t#{varianth['branches'].size} branches:\n#{varianth['branches'].ai}"
                         # puts "\t#{varianth['versions'].size} versions:\n#{varianth['versions'].ai}"
-                        versions = {}
-                        releases = {}
-                        versrels = {}
-                        bmin = -1
-                        bmax = -1
-                        varianth['builds'].each do |bld|
-                          releases[bld['release']] ||= 0
-                          releases[bld['release']] += 1
-                          unless bld['build_number'].nil?
-                            bnum = bld['build_number'].to_i
-                            if bmin < 0 or bnum < bmin
-                              bmin = bnum
-                            end
-                            if bnum > bmax
-                              bmax = bnum
-                            end
-                          end
-                          ver = _getMatches(@vars, bld['build_name'], :version)
-                          versions[ver] ||= 0
-                          versions[ver] += 1
-                          versrels["#{ver}-#{bld['release']}"] ||= 0
-                          versrels["#{ver}-#{bld['release']}"] += 1
-                        end
+                        bmax, bmin, releases, versions, versrels = getVariantVersionsAndReleases(varianth)
                         puts "\t#{versions.size} versions:\n#{versions.ai}"
                         puts "\t#{releases.size} releases:\n#{releases.ai}"
                         puts "\t#{versrels.size} version-releases:\n#{versrels.ai}"
@@ -675,6 +656,34 @@ EC2 Instance profile
             end
           end
           @vars[:return_code]
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def getVariantVersionsAndReleases(varianth)
+          versions = {}
+          releases = {}
+          versrels = {}
+          bmin = -1
+          bmax = -1
+          varianth['builds'].each do |bld|
+            releases[bld['release']] ||= 0
+            releases[bld['release']] += 1
+            unless bld['build_number'].nil?
+              bnum = bld['build_number'].to_i
+              if bmin < 0 or bnum < bmin
+                bmin = bnum
+              end
+              if bnum > bmax
+                bmax = bnum
+              end
+            end
+            ver = _getMatches(@vars, bld['build_name'], :version)
+            versions[ver] ||= 0
+            versions[ver] += 1
+            versrels["#{ver}-#{bld['release']}"] ||= 0
+            versrels["#{ver}-#{bld['release']}"] += 1
+          end
+          return bmax, bmin, releases, versions, versrels
         end
 
         # ---------------------------------------------------------------------------------------------------------------
@@ -1060,7 +1069,7 @@ EC2 Instance profile
           varianth['branches'] = Hash[branches.map.with_index.to_a].keys
         end
 
-        private :_update, :checkForInventory, :pullInventory, :_update, :_updateBranches, :_updateLatest, :_updateVersions
+        protected :_update, :_update, :_updateBranches, :_updateLatest, :_updateVersions
 
       end
     end

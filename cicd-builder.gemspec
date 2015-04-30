@@ -27,6 +27,8 @@ Gem::Specification.new do |gem|
   gem.add_dependency 'git', '>= 1.2.7', '< 1.3'
   gem.add_dependency 'semverse', '>= 1.2.1', '< 1.3'
   gem.add_dependency 'artifactory', '>= 2.2.1', '< 2.3'
+  gem.add_dependency 'parallel', '>= 1.4.1', '< 1.5'
+  gem.add_dependency 'ruby-progressbar', '>= 1.7.5', '< 2'
 
   gem.add_development_dependency 'bundler', '>= 1.7', '< 1.8'
   gem.add_development_dependency 'rake', '>= 10.3', '< 11'

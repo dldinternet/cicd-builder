@@ -1,4 +1,61 @@
 require 'artifactory'
+require 'artifactory/version'
+require 'parallel'
+require 'ruby-progressbar'
+
+raise "Need to check compatibility of monkey patch for Artifactory.VERSION == #{::Artifactory::VERSION}" unless ::Artifactory::VERSION == '2.2.1'
+module Artifactory
+  module Defaults
+    class << self
+      #
+      # Reset all configuration options to their default values.
+      #
+      # @example Reset all settings
+      #   Artifactory.reset!
+      #
+      # @return [self]
+      #
+      def reset!
+        @_options = nil
+        options
+      end
+      alias_method :setup, :reset!
+      #
+      # Number of seconds to wait for a response from Artifactory
+      #
+      # @return [Integer, nil]
+      #
+      def read_timeout
+        ENV['ARTIFACTORY_READ_TIMEOUT'].to_s.to_i || 120
+      end
+    end
+  end
+end
+
+module Artifactory
+  #
+  # A re-usable class containing configuration information for the {Client}. See
+  # {Defaults} for a list of default values.
+  #
+  module Configurable
+    #
+    # Reset all configuration options to their default values.
+    #
+    # @example Reset all settings
+    #   Artifactory.reset!
+    #
+    # @return [self]
+    #
+    def reset!
+      Defaults.reset!
+      Artifactory::Configurable.keys.each do |key|
+        instance_variable_set(:"@#{key}", Defaults.options[key])
+      end
+      self
+    end
+    alias_method :setup, :reset!
+  end
+end
 
 module CiCd
 	module Builder
@@ -48,6 +105,16 @@ module CiCd
           #   # config.proxy_address  = 'my.proxy.server'
           #   # config.proxy_port     = '8080'
           # end
+          if ENV['ARTIFACTORY_READ_TIMEOUT']
+            # [2015-04-29 Christo] Sometimes you just have to shake your head ...
+            # a) The Artifactory object does it's setup and read ENV variables during require phase ...
+            # b) They do not check if the passed value is valid ( in range or even a number at all ) and they don't convert it to an int
+            # c) ENV does not allow one to do this: ENV['ARTIFACTORY_READ_TIMEOUT'] = ENV['ARTIFACTORY_READ_TIMEOUT'].to_s.to_i
+            # d) ::Artifactory.setup and ::Artifactory.reset! does not reread those options!!!! OMG!
+            # Only resort: Open ::Artifactory class and override the method with the code it should have had ... %)
+            ::Artifactory.setup
+          end
+
           @client = ::Artifactory::Client.new()
         end
 
@@ -86,7 +153,7 @@ module CiCd
             else
               raise 'Artifact does not have file or data?'
             end
-            file_name, file_ext = get_artifact_file_name_ext(data)
+            file_name, file_ext = (data[:file_name] and data[:file_ext]) ? [data[:file_name], data[:file_ext]] : get_artifact_file_name_ext(data)
             if file_name =~ %r'\.+'
               raise "Unable to parse out file name in #{data[:file]}"
             end
@@ -210,20 +277,59 @@ module CiCd
         def maybeArtifactoryObject(artifact_name,artifact_version,wide=true)
           begin
             # Get a list of matching artifacts in this repository
-            result = @client.artifact_gavc_search(group: artifactory_org_path(), name: artifact_name, version: "#{artifact_version}", repos: [artifactory_repo()])
-            if result.size > 0
-              @logger.info "Artifactory gavc_search match g=#{artifactory_org_path()},a=#{artifact_name},v=#{artifact_version},r=#{artifactory_repo()}: #{result}"
-              # raise "GAVC started working: #{result.ai}"
+            @logger.info "Artifactory gavc_search g=#{artifactory_org_path()},a=#{artifact_name},v=#{artifact_version},r=#{artifactory_repo()}"
+            @arti_search_result     = []
+            # results = ::Parallel.map([:search,:progress], preserve_results: true, in_threads: 2) { |task|
+            #   if task == :search
+            #     @logger.debug 'searching ... '
+            #     @arti_search_result = @client.artifact_gavc_search(group: artifactory_org_path(), name: artifact_name, version: "#{artifact_version}", repos: [artifactory_repo()])
+            #     @logger.debug 'searching complete!'
+            #     raise ::Parallel::Kill
+            #     # raise ::Parallel::Break # -> stops after all current items are finished
+            #   else
+            #     progressbar = ::ProgressBar.create(:title => 'artifact_gavc_search', progress_mark: '=', length: 30, remainder_mark: '.')
+            #     30.times { |i|
+            #       @logger.debug i
+            #       sleep 1
+            #       progressbar.increment
+            #     }
+            #     raise ::Parallel::Kill
+            #   end
+            # }
+            monitor(30, 'artifact_gavc_search'){
+              @arti_search_result = @client.artifact_gavc_search(group: artifactory_org_path(), name: artifact_name, version: "#{artifact_version}", repos: [artifactory_repo()])
+            }
+            # noinspection RubyScope
+            if @arti_search_result.size > 0
+              @logger.info "\tresult: #{@arti_search_result}"
             elsif wide
               @logger.warn 'GAVC search came up empty!'
-              result = @client.artifact_search(name: artifact_name, repos: [artifactory_repo()])
-              @logger.info "Artifactory search match a=#{artifact_name},r=#{artifactory_repo()}: #{result}"
+              @arti_search_result = @client.artifact_search(name: artifact_name, repos: [artifactory_repo()])
+              @logger.info "Artifactory search match a=#{artifact_name},r=#{artifactory_repo()}: #{@arti_search_result}"
             end
-            result
+            @arti_search_result
           rescue Exception => e
             @logger.error "Artifactory error: #{e.class.name} #{e.message}"
             raise e
           end
+        end
+
+        def monitor(limit,title='Progress')
+          raise 'Must have a block' unless block_given?
+          thread = Thread.new(){
+            yield
+          }
+          progressbar = ::ProgressBar.create({title: title, progress_mark: '=', starting_at: 0, total: limit, remainder_mark: '.', throttle_rate: 0.5})
+          limit.times do
+            res = thread.join(1)
+            progressbar.increment
+            progressbar.total = limit
+            unless thread.alive? #or thread.stop?
+              puts ''
+              break
+            end
+          end
+          thread.kill if thread.alive? or thread.stop?
         end
 
         def uploadArtifact(artifact_module, artifact_version, artifact_path, data)
@@ -236,10 +342,38 @@ module CiCd
                                 }
           artifact.size = data[:size]
           @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Start upload #{artifact_path} = #{data[:size]} bytes"
-          result = artifact.upload(artifactory_repo(), "#{artifact_path}", data[:properties] || {})
-          @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Uploaded: #{result.attributes.select { |k, _| k != :client }.ai}"
-          artifact.upload_checksum(artifactory_repo(), "#{artifact_path}", :sha1, data[:sha1])
-          artifact.upload_checksum(artifactory_repo(), "#{artifact_path}", :md5,  data[:md5])
+          monitor(30, 'upload') {
+            @arti_upload_result = artifact.upload(artifactory_repo(), "#{artifact_path}", data[:properties] || {})
+          }
+          @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Uploaded: #{@arti_upload_result.attributes.select { |k, _| k != :client }.ai}"
+          3.times{
+            @arti_upload_checksum = false
+            monitor(30, 'upload_checksum') {
+              begin
+                artifact.upload_checksum(artifactory_repo(), "#{artifact_path}", :sha1, data[:sha1])
+                @arti_upload_checksum = true
+              rescue Exception => e
+                @logger.fatal "Failed to upload #{artifact_path}: #{e.class.name} #{e.message}"
+                raise e
+              end
+            }
+            break if @arti_upload_checksum
+          }
+          raise "Failed to upload SHA1 for #{artifact_path}" unless @arti_upload_checksum
+          3.times{
+            @arti_upload_checksum = false
+            monitor(30, 'upload_checksum') {
+              begin
+                artifact.upload_checksum(artifactory_repo(), "#{artifact_path}", :md5,  data[:md5])
+                @arti_upload_checksum = true
+              rescue Exception => e
+                @logger.fatal "Failed to upload #{artifact_path}: #{e.class.name} #{e.message}"
+                raise e
+              end
+            }
+            break if @arti_upload_checksum
+          }
+          raise "Failed to upload MD5 for #{artifact_path}" unless @arti_upload_checksum
           attempt = 0
           objects = []
           while attempt < 3
@@ -258,8 +392,17 @@ module CiCd
               @logger.info "Not copying (identical artifact): #{artifact_path}"
             else
               @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Start copy #{artifact_path} = #{artifact.attributes[:size]} bytes"
-              result = artifact.copy("#{artifactory_repo()}/#{artifact_path}")
-              @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Copied: #{result.ai}"
+              copied = false
+              3.times{
+                copied = false
+                monitor(30){
+                  result = artifact.copy("#{artifactory_repo()}/#{artifact_path}")
+                  @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Copied: #{result.ai}"
+                  copied = true
+                }
+                break if copied
+              }
+              raise "Failed to copy #{artifact_path}" unless copied
             end
             objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
             unless objects.size > 0
@@ -276,7 +419,7 @@ module CiCd
 
         # ---------------------------------------------------------------------------------------------------------------
         def uploadBuildArtifacts()
-          @logger.step __method__.to_s
+          @logger.step CLASS+'::'+__method__.to_s
           if @vars.has_key?(:build_dir) and @vars.has_key?(:build_pkg)
             begin
               artifacts = @vars[:artifacts] rescue []
@@ -312,6 +455,22 @@ module CiCd
             @vars[:return_code] = Errors::NO_ARTIFACTS
           end
           @vars[:return_code]
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def cleanupTempFiles
+          @vars[:artifacts].each do |art|
+            if art[:data][:temp].is_a?(FalseClass)
+              if File.exists?(art[:data][:file])
+                File.unlink(art[:data][:file]) if File.exists?(art[:data][:file])
+                art[:data].delete(:file)
+                art[:data].delete(:temp)
+              else
+                @logger.warn "Temporary file disappeared: #{data.ai}"
+                @vars[:return_code] = Errors::TEMP_FILE_MISSING
+              end
+            end
+          end
         end
 
       end

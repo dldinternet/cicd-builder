@@ -34,6 +34,7 @@ module CiCd
       BAD_ARTIFACTS               = i+=1
       ARTIFACT_NOT_FOUND          = i+=1
       ARTIFACT_CHECKSUM_BAD       = i+=1
+      ARTIFACT_MULTI_MATCH        = i+=1
       SAVE_LATEST_VARS            = i+=1
       SAVE_ENVIRONMENT_VARS       = i+=1
       NO_ARTIFACTS                = i+=1
@@ -44,7 +45,7 @@ module CiCd
       PRUNE_NO_TREE               = i+=1
       PRUNE_NO_VARIANT            = i+=1
       PRUNE_NO_PRUNER             = i+=1
-      PRUNE_TOO_OLD               = i+=1
+      REPO_TOO_OLD                = i+=1
       PRUNE_VARIANT_MIA           = i+=1
       PRUNE_BAD_BRANCH            = i+=1
       PRUNE_BAD_VERSION           = i+=1
@@ -53,6 +54,12 @@ module CiCd
       SYNC_BAD_PRODUCT            = i+=1
       SYNC_NO_VARIANT             = i+=1
       SYNC_NO_DRAWER              = i+=1
+      REPO_NO_VARIANT             = i+=1
+      REPO_BAD_VERSION            = i+=1
+      REPO_BAD_BRANCH             = i+=1
+      REPO_NO_BUILD               = i+=1
+
+      PRUNE_TOO_OLD               = REPO_TOO_OLD
 
       require 'awesome_print'
 

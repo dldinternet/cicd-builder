@@ -12,12 +12,9 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
 		def getRepoClass(type = nil)
-      @logger.info __method__.to_s
+      @logger.info CLASS+'::'+__method__.to_s
       if type.nil?
         type ||= 'S3'
-        if ENV.has_key?('REPO_TYPE')
-          type = ENV['REPO_TYPE']
-        end
       end
 
       @logger.info "#{type} repo interface"
@@ -32,15 +29,33 @@ module CiCd
     end
 
     # ---------------------------------------------------------------------------------------------------------------
-    def performOnRepoInstance(verb)
-      @logger.step __method__.to_s + ' ' + verb
-      clazz = getRepoClass()
+    def getRepoInstance(type = nil)
+      @logger.info CLASS+'::'+__method__.to_s
+      if type.nil?
+        type ||= 'S3'
+        if ENV.has_key?('REPO_TYPE')
+          type = ENV['REPO_TYPE']
+        end
+      end
+      clazz = getRepoClass(type)
       if clazz.is_a?(Class) and not clazz.nil?
         @repo = clazz.new(self)
+      else
+        @logger.error "#{clazz.name.to_s} is not a valid repo class"
+        @vars[:return_code] = Errors::BUILDER_REPO_TYPE
+      end
+      @vars[:return_code]
+    end
+
+    # ---------------------------------------------------------------------------------------------------------------
+    def performOnRepoInstance(verb)
+      @logger.info CLASS+'::'+__method__.to_s
+      getRepoInstance()
+      if 0 == @vars[:return_code]
         method = @repo.method(verb)
         if @repo.respond_to?(verb)
-          unless method.owner == clazz
-            @logger.warn "#{clazz.name.to_s} does not override action #{verb}"
+          unless method.owner == @repo.class
+            @logger.warn "#{@repo.class.name} does not override action #{verb}"
           # else
           #   @logger.error "#{clazz.name.to_s} does not implement action #{verb}"
           #   @vars[:return_code] = Errors::BUILDER_REPO_ACTION
@@ -50,45 +65,43 @@ module CiCd
           @logger.fatal "'#{verb}' not implemented!"
           @vars[:return_code] = Errors::BUILDER_REPO_ACTION
         end
-      else
-        @logger.error "#{clazz.name.to_s} is not a valid repo class"
-        @vars[:return_code] = Errors::BUILDER_REPO_TYPE
       end
       @vars[:return_code]
     end
 
     # ---------------------------------------------------------------------------------------------------------------
     def uploadBuildArtifacts()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
       performOnRepoInstance(__method__.to_s)
     end
 
     # ---------------------------------------------------------------------------------------------------------------
     def analyzeInventory()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
 			performOnRepoInstance(__method__.to_s)
     end
 
     # ---------------------------------------------------------------------------------------------------------------
     def pruneInventory()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
 			performOnRepoInstance(__method__.to_s)
     end
 
     # ---------------------------------------------------------------------------------------------------------------
     def syncInventory()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
 			performOnRepoInstance(__method__.to_s)
     end
 
     # ---------------------------------------------------------------------------------------------------------------
     def syncRepo()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
 			performOnRepoInstance(__method__.to_s)
     end
 
     # ---------------------------------------------------------------------------------------------------------------
 		def manifestMetadata
+      @logger.info CLASS+'::'+__method__.to_s
 			manifest = @vars[:build_mdd].dup
 
 			manifest[:manifest] = getBuilderVersion

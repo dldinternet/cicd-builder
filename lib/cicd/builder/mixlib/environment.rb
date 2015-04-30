@@ -1,10 +1,11 @@
 module CiCd
 	module Builder
     require 'awesome_print'
+    CLASS = 'CiCd::Builder'
 
 		# ---------------------------------------------------------------------------------------------------------------
 		def checkEnvironment()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
 			# [2013-12-30 Christo] Detect CI ...
 			unless ENV.has_key?('JENKINS_HOME')
 				@logger.error "Sorry, your CI environment is not supported at this time (2013-12-30) ... Christo De Lange\n"+
@@ -31,7 +32,7 @@ module CiCd
 
 		# ---------------------------------------------------------------------------------------------------------------
 		def getVars()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
 			@vars               ||= {}
 			@vars[:release]     = 'latest'
 			@vars[:build_store] = '/tmp'
@@ -142,7 +143,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
 		def saveEnvironment(ignored=ENV_IGNORED)
-      @logger.step __method__.to_s
+      @logger.info CLASS+'::'+__method__.to_s
 			@logger.info "Save environment to #{@vars[:vars_fil]}"
 			vstr = ['[global]']
 			ENV.to_hash.sort.each{|k,v|
@@ -155,7 +156,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def saveBuild()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
       begin
         raise 'ERROR: Checksum not read'       unless @vars.has_key?(:latest_sha)
         raise 'ERROR: Checksum not calculated' unless @vars.has_key?(:build_sha)

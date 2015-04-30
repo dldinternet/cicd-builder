@@ -5,7 +5,7 @@ module CiCd
 
 		# ---------------------------------------------------------------------------------------------------------------
 		def cleanupBuild()
-      @logger.step __method__.to_s
+      @logger.info CLASS+'::'+__method__.to_s
       [ :build_pkg, :build_chk, :build_mdf, :build_mff ].each do |fil|
         if File.exists?(@vars[fil])
           begin
@@ -31,7 +31,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def prepareBuild()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
       meta = {}
       @vars[:return_code] = 0
       %w[ WORKSPACE PROJECT_NAME ].each do |e|
@@ -105,7 +105,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def makeBuild()
-      @logger.step __method__.to_s
+      @logger.step CLASS+'::'+__method__.to_s
       if @vars.has_key?(:build_dir) and @vars.has_key?(:build_pkg)
         begin
           do_build = false
@@ -208,7 +208,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
 		def packageBuild()
-      @logger.step __method__.to_s
+      @logger.info CLASS+'::'+__method__.to_s
 			excludes=%w(*.iml *.txt *.sh *.md .gitignore .editorconfig .jshintrc *.deprecated adminer doc)
 			excludes = excludes.map{ |e| "--exclude=#{@vars[:build_nam]}/#{e}" }.join(' ')
 			cmd = %(cd #{ENV['WORKSPACE']}; tar zcvf #{@vars[:build_pkg]} #{excludes} #{@vars[:build_nam]} 1>#{@vars[:build_pkg]}.manifest)
@@ -222,7 +222,7 @@ module CiCd
 
     # ---------------------------------------------------------------------------------------------------------------
     def createMetaData()
-      @logger.step __method__.to_s
+      @logger.info CLASS+'::'+__method__.to_s
       @vars[:build_mdd].merge!({
                                 :Generation => @options[:gen],
                                 :Project => @vars[:project_name],
