@@ -132,15 +132,18 @@ module CiCd
         # ---------------------------------------------------------------------------------------------------------------
         def uploadToRepo(artifacts)
           # Set a few build properties on the endpoint URL
-          @properties_matrix = {
-              :'build.name'   =>  @vars[:build_mdd][:Project],
-              :'build.number' =>  @vars[:build_mdd][:Build],
-              :'vcs.revision' =>  @vars[:build_mdd][:Commit]
-          }
+          @properties_matrix = {}
           @vars[:build_mdd].each do |k,v|
             @properties_matrix["build.#{k.downcase}"] = v
           end
-          # matrix = properties.map{|k,v| (v.nil? or v.empty?) ? nil : "#{k}=#{v}"}.join("\;").gsub(%r'^\;*(.*?)\;*$', '\1')
+          # noinspection RubyStringKeysInHashInspection
+          @properties_matrix.merge!({
+            'build.name'   =>  @vars[:build_mdd][:Project],
+            'build.number' =>  @vars[:build_mdd][:Build],
+            'build.branch' =>  @vars[:branch],
+            'vcs.revision' =>  @vars[:build_mdd][:Commit],
+            'vcs.branch'   =>  @vars[:build_mdd][:Branch],
+          })
           # @client.endpoint += ";#{matrix}"
           artifacts.each{|art|
             data = art[:data]

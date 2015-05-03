@@ -49,19 +49,20 @@ module CiCd
 
           place = ''
           begin
+            # Assuming we are in the workspace ...
+            place = "Git.open('#{ENV['WORKSPACE']}')"
             req = 'require "git"'
             eval req
 
-            # Assuming we are in the workspace ...
-            place = "Git.open('#{ENV['WORKSPACE']}')"
             git = Git.open(ENV['WORKSPACE'], :log => @logger)
             place = 'git.log'
             meta[:Commit] = git.log[0].sha
             place = 'git.current_branch'
             meta[:Branch] = git.current_branch
+            # meta[:Remotes] = git.remotes
 
             @vars[:build_ext] = 'tar.gz'
-            @vars[:build_bra] = meta[:Branch].gsub(%r([/|]),'.')
+            @vars[:build_bra] = @vars[:branch] || meta[:Branch].gsub(%r([/|]),'.')
             @vars[:build_ver] = "#{meta[:Version]}"
             @vars[:build_rel] = "#{meta[:Release]}"
             @vars[:build_vrb] = "#{@vars[:build_ver]}-release-#{meta[:Release]}-#{@vars[:build_bra]}-#{@vars[:variant]}" #
