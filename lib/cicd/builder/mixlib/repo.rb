@@ -147,7 +147,7 @@ module CiCd
 					manifest[:env][k.to_s] = v
 				end
 			}
-      JSON.pretty_generate( manifest, { indent: "\t", space: ' '})
+      JSON.pretty_generate( manifest.to_hash, { indent: "\t", space: ' '})
 		end
 
     # ---------------------------------------------------------------------------------------------------------------

@@ -168,6 +168,7 @@ module CiCd
           }
           @vars[:return_code]
         end
+        alias_method :cicd_uploadToRepo, :uploadToRepo
 
         def get_artifact_file_name_ext(data)
           file_name = File.basename(data[:file])
@@ -193,16 +194,17 @@ module CiCd
           artifact_version = args[:artifact_version]
           file_ext         = args[:file_ext]
           file_name        = args[:file_name]
+          make_copy        = (args[:copy].nil? or args[:copy])
 
           artifact_name = getArtifactName(data[:name], file_name, artifact_version, file_ext) # artifact_path = "#{artifactory_org_path()}/#{data[:name]}/#{data[:version]}-#{@vars[:variant]}/#{artifact_name}"
           artifact_path = getArtifactPath(artifact_module, artifact_version, artifact_name)
-          objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
+          objects = maybeArtifactoryObject(artifact_module, artifact_version, false, args[:repo])
           upload = false
           matched = []
           if objects.nil? or objects.size == 0
             upload = true
           else
-            @logger.info "#{artifactory_endpoint()}/#{artifactory_repo()}/#{artifact_path} exists - #{objects.size} results"
+            @logger.info "#{artifactory_endpoint()}/#{args[:repo] || artifactory_repo()}/#{artifact_path} exists - #{objects.size} results"
             @logger.info "\t#{objects.map{|o| o.attributes[:uri]}.join("\n\t")}"
             matched = matchArtifactoryObjects(artifact_path, data, objects)
             upload ||= (matched.size == 0)
@@ -213,7 +215,7 @@ module CiCd
               properties_matrix["product.#{k}"] = v
             end
             data[:properties] = properties_matrix.merge(@properties_matrix)
-            objects = uploadArtifact(artifact_module, artifact_version, artifact_path, data)
+            objects = uploadArtifact(artifact_module, artifact_version, artifact_path, data, args[:repo])
             matched = matchArtifactoryObjects(artifact_path, data, objects)
           else
             @logger.info "Keep existing #{matched.map{|o| o.attributes[:uri]}.join("\t")}"
@@ -228,16 +230,16 @@ module CiCd
             end
           end
           @vars[:return_code] = Errors::ARTIFACT_NOT_UPLOADED unless matched.size > 0
-          if @vars[:return_code] == 0
+          if @vars[:return_code] == 0 and make_copy
             artifact_version += "-#{data[:build] || @vars[:build_num]}"
             artifact_name = getArtifactName(data[:name], file_name, artifact_version, file_ext, )
             artifact_path = getArtifactPath(artifact_module, artifact_version, artifact_name)
-            copies  = maybeArtifactoryObject(artifact_module, artifact_version, false)
+            copies  = maybeArtifactoryObject(artifact_module, artifact_version, false, args[:repo])
             matched = matchArtifactoryObjects(artifact_path, data, copies)
             upload  = (matched.size == 0)
             if upload
               objects.each do |artifact|
-                copied = copyArtifact(artifact_module, artifact_version, artifact_path, artifact)
+                copied = copyArtifact(artifact_module, artifact_version, artifact_path, artifact, args[:repo])
                 unless copied.size > 0
                   @vars[:return_code] = Errors::ARTIFACT_NOT_COPIED
                   break
@@ -255,6 +257,7 @@ module CiCd
 
           @vars[:return_code]
         end
+        alias_method :cicd_maybeUploadArtifactoryObject, :maybeUploadArtifactoryObject
 
         def matchArtifactoryObjects(artifact_path, data, objects)
           # matched = false
@@ -277,30 +280,13 @@ module CiCd
         end
 
         # ---------------------------------------------------------------------------------------------------------------
-        def maybeArtifactoryObject(artifact_name,artifact_version,wide=true)
+        def maybeArtifactoryObject(artifact_name,artifact_version,wide=true,repo=nil)
           begin
             # Get a list of matching artifacts in this repository
-            @logger.info "Artifactory gavc_search g=#{artifactory_org_path()},a=#{artifact_name},v=#{artifact_version},r=#{artifactory_repo()}"
+            @logger.info "Artifactory gavc_search g=#{artifactory_org_path()},a=#{artifact_name},v=#{artifact_version},r=#{repo || artifactory_repo()}"
             @arti_search_result     = []
-            # results = ::Parallel.map([:search,:progress], preserve_results: true, in_threads: 2) { |task|
-            #   if task == :search
-            #     @logger.debug 'searching ... '
-            #     @arti_search_result = @client.artifact_gavc_search(group: artifactory_org_path(), name: artifact_name, version: "#{artifact_version}", repos: [artifactory_repo()])
-            #     @logger.debug 'searching complete!'
-            #     raise ::Parallel::Kill
-            #     # raise ::Parallel::Break # -> stops after all current items are finished
-            #   else
-            #     progressbar = ::ProgressBar.create(:title => 'artifact_gavc_search', progress_mark: '=', length: 30, remainder_mark: '.')
-            #     30.times { |i|
-            #       @logger.debug i
-            #       sleep 1
-            #       progressbar.increment
-            #     }
-            #     raise ::Parallel::Kill
-            #   end
-            # }
             monitor(30, 'artifact_gavc_search'){
-              @arti_search_result = @client.artifact_gavc_search(group: artifactory_org_path(), name: artifact_name, version: "#{artifact_version}", repos: [artifactory_repo()])
+              @arti_search_result = @client.artifact_gavc_search(group: artifactory_org_path(), name: artifact_name, version: "#{artifact_version}", repos: [repo || artifactory_repo()])
             }
             # noinspection RubyScope
             if @arti_search_result.size > 0
@@ -309,6 +295,26 @@ module CiCd
               @logger.warn 'GAVC search came up empty!'
               @arti_search_result = @client.artifact_search(name: artifact_name, repos: [artifactory_repo()])
               @logger.info "Artifactory search match a=#{artifact_name},r=#{artifactory_repo()}: #{@arti_search_result}"
+            end
+            @arti_search_result
+          rescue Exception => e
+            @logger.error "Artifactory error: #{e.class.name} #{e.message}"
+            raise e
+          end
+        end
+
+        # ---------------------------------------------------------------------------------------------------------------
+        def latestArtifactoryVersion(artifact_name, repo=nil)
+          begin
+            # Get a list of matching artifacts in this repository
+            @logger.info "Artifactory latest_version g=#{artifactory_org_path()},a=#{artifact_name},r=#{repo || artifactory_repo()}"
+            @arti_search_result     = []
+            monitor(30, 'artifact_latest_version'){
+              @arti_search_result = ::Artifactory::Resource::Artifact.latest_version(client: @client, group: artifactory_org_path(), name: artifact_name, repos: [repo || artifactory_repo()])
+            }
+            # noinspection RubyScope
+            if @arti_search_result.size > 0
+              @logger.info "\tresult: #{@arti_search_result}"
             end
             @arti_search_result
           rescue Exception => e
@@ -337,7 +343,7 @@ module CiCd
           thread.kill if thread.alive? or thread.stop?
         end
 
-        def uploadArtifact(artifact_module, artifact_version, artifact_path, data)
+        def uploadArtifact(artifact_module, artifact_version, artifact_path, data, repo=nil)
           data[:size] = File.size(data[:file])
           artifact = ::Artifactory::Resource::Artifact.new(local_path: data[:file], client: @client)
           # noinspection RubyStringKeysInHashInspection
@@ -348,14 +354,14 @@ module CiCd
           artifact.size = data[:size]
           @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Start upload #{artifact_path} = #{data[:size]} bytes"
           monitor(30, 'upload') {
-            @arti_upload_result = artifact.upload(artifactory_repo(), "#{artifact_path}", data[:properties] || {})
+            @arti_upload_result = artifact.upload(repo || artifactory_repo(), "#{artifact_path}", data[:properties] || {})
           }
           @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Uploaded: #{@arti_upload_result.attributes.select { |k, _| k != :client }.ai}"
           3.times{
             @arti_upload_checksum = false
             monitor(30, 'upload_checksum') {
               begin
-                artifact.upload_checksum(artifactory_repo(), "#{artifact_path}", :sha1, data[:sha1])
+                artifact.upload_checksum(repo || artifactory_repo(), "#{artifact_path}", :sha1, data[:sha1])
                 @arti_upload_checksum = true
               rescue Exception => e
                 @logger.fatal "Failed to upload #{artifact_path}: #{e.class.name} #{e.message}"
@@ -369,7 +375,7 @@ module CiCd
             @arti_upload_checksum = false
             monitor(30, 'upload_checksum') {
               begin
-                artifact.upload_checksum(artifactory_repo(), "#{artifact_path}", :md5,  data[:md5])
+                artifact.upload_checksum(repo || artifactory_repo(), "#{artifact_path}", :md5,  data[:md5])
                 @arti_upload_checksum = true
               rescue Exception => e
                 @logger.fatal "Failed to upload #{artifact_path}: #{e.class.name} #{e.message}"
@@ -382,7 +388,7 @@ module CiCd
           attempt = 0
           objects = []
           while attempt < 3
-            objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
+            objects = maybeArtifactoryObject(artifact_module, artifact_version, false, repo)
             break if objects.size > 0
             sleep 2
             attempt += 1
@@ -391,9 +397,9 @@ module CiCd
           objects
         end
 
-        def copyArtifact(artifact_module, artifact_version, artifact_path, artifact)
+        def copyArtifact(artifact_module, artifact_version, artifact_path, artifact, repo=nil)
           begin
-            if artifact.attributes[:uri].eql?(File.join(artifactory_endpoint, artifactory_repo, artifact_path))
+            if artifact.attributes[:uri].eql?(File.join(artifactory_endpoint, repo || artifactory_repo, artifact_path))
               @logger.info "Not copying (identical artifact): #{artifact_path}"
             else
               @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Start copy #{artifact_path} = #{artifact.attributes[:size]} bytes"
@@ -401,7 +407,7 @@ module CiCd
               3.times{
                 copied = false
                 monitor(30){
-                  result = artifact.copy("#{artifactory_repo()}/#{artifact_path}")
+                  result = artifact.copy("#{repo || artifactory_repo()}/#{artifact_path}")
                   @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Copied: #{result.ai}"
                   copied = true
                 }
@@ -409,10 +415,10 @@ module CiCd
               }
               raise "Failed to copy #{artifact_path}" unless copied
             end
-            objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
+            objects = maybeArtifactoryObject(artifact_module, artifact_version, false, repo)
             unless objects.size > 0
               sleep 10
-              objects = maybeArtifactoryObject(artifact_module, artifact_version, false)
+              objects = maybeArtifactoryObject(artifact_module, artifact_version, false, repo)
               raise "Failed to copy '#{artifact_path}'" unless objects.size > 0
             end
             objects
@@ -452,7 +458,7 @@ module CiCd
               # end
               @vars[:return_code]
             rescue => e
-              @logger.error "#{e.class.name} #{e.message}"
+              @logger.error "#{e.class.name} #{e.message}\n#{e.backtrace.ai}"
               @vars[:return_code] = Errors::ARTIFACT_UPLOAD_EXCEPTION
               raise e
             end

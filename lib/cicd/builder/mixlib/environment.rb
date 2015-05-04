@@ -65,8 +65,10 @@ module CiCd
 				@vars[:build_store] = "#{ENV['BUILD_STORE']}"
 			end
 
-			if ENV.has_key?('BRANCH')
-				@vars[:branch] = "#{ENV['BRANCH'].gsub(%r'\/','.')}"
+			if ENV.has_key?('GIT_BRANCH')
+				@vars[:branch] = "#{ENV['GIT_BRANCH'].gsub(%r'^(refs/[^/]?|origin)/','').gsub(%r'\/','.')}"
+      elsif ENV.has_key?('BRANCH')
+        @vars[:branch] = "#{ENV['BRANCH'].gsub(%r'\/','.')}"
       end
 
 			if ENV.has_key?('VARIANT')
@@ -80,7 +82,7 @@ module CiCd
       if ENV.has_key?('ACTIONS')
         @vars[:actions] = ENV['ACTIONS'].split(%r'[, \t]+')
       else
-        @vars[:actions] = %w(prepareBuild makeBuild saveBuild uploadBuildArtifacts)
+        @vars[:actions] = %w(prepareBuild makeBuild saveBuild uploadBuildArtifacts cleanupAfterUpload)
       end
 
       if ENV.has_key?('TREE')

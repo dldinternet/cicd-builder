@@ -223,6 +223,12 @@ module CiCd
 		end
 
     # ---------------------------------------------------------------------------------------------------------------
+		def cleanupAfterUpload()
+      @logger.info CLASS+'::'+__method__.to_s
+			@logger.debug = %(Prior to VERSION 0.9.58 there was no #{__method__.to_s} action)
+		end
+
+    # ---------------------------------------------------------------------------------------------------------------
     def createMetaData()
       @logger.info CLASS+'::'+__method__.to_s
       @vars[:build_mdd].merge!({

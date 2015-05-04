@@ -59,6 +59,8 @@ module CiCd
       REPO_BAD_BRANCH             = i+=1
       REPO_NO_BUILD               = i+=1
 
+      NO_ACCOUNTS                 = i+=1
+
       PRUNE_TOO_OLD               = REPO_TOO_OLD
 
       require 'awesome_print'
