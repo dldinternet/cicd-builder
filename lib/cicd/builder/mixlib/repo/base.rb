@@ -22,7 +22,7 @@ module CiCd
 
         # ---------------------------------------------------------------------------------------------------------------
         def getKey
-          key = "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_nmn]}"
+          @builder.getKey # key = "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_mvn]}/#{@vars[:build_nmn]}"
         end
 
         # ---------------------------------------------------------------------------------------------------------------

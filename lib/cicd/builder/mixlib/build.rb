@@ -74,6 +74,7 @@ module CiCd
             @vars[:build_chk] = "#{@vars[:build_nmn]}.checksum"
             @vars[:build_mff] = "#{@vars[:build_nmn]}.manifest"
             @vars[:build_mdf] = "#{@vars[:build_nmn]}.meta"
+            @vars[:build_mvn] = "#{@vars[:build_ver]}-#{@vars[:build_num]}"
             @vars[:build_mdd] = meta.dup
             #noinspection RubyArgCount
             @vars[:build_mds] = Digest::SHA256.hexdigest(meta.to_s)

@@ -23,9 +23,15 @@ module CiCd
 			down
 		end
 
+		# ---------------------------------------------------------------------------------------------------------------
+		def getKey
+			key = "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_mvn]}/#{@vars[:build_nmn]}"
+		end
+
     # ---------------------------------------------------------------------------------------------------------------
     def addArtifact(artifacts, script, prefix, opts = {})
-      key = "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{script.gsub(%r|^#{prefix}|, '')}"
+      key = File.join(File.dirname(getKey()), script.gsub(%r|^#{prefix}|, ''))
+      # "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_mvn]}/#{script.gsub(%r|^#{prefix}|, '')}"
       # Store the artifact - be sure to inherit possible overrides in pkg name and ext but dictate the drawer!
       artifacts << {
           key: key,

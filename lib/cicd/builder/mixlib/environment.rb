@@ -66,7 +66,7 @@ module CiCd
 			end
 
 			if ENV.has_key?('BRANCH')
-				@vars[:branch] = "#{ENV['BRANCH']}"
+				@vars[:branch] = "#{ENV['BRANCH'].gsub(%r'\/','.')}"
       end
 
 			if ENV.has_key?('VARIANT')

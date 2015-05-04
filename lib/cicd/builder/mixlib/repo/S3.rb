@@ -192,7 +192,7 @@ EC2 Instance profile
             unless varianth['builds'].map { |b| b['build_name'] }.include?(@vars[:build_nmn])
               # noinspection RubyStringKeysInHashInspection
               filing = _createFiling(json, {
-                                             'drawer'        => @vars[:build_nam],
+                                             'drawer'        => (@vars[:build_mvn] ? "#{@vars[:build_nam]}/#{@vars[:build_mvn]}" : @vars[:build_nam]),
                                              'build_name'    => @vars[:build_nmn],
                                              'build_number'  => @vars[:build_num],
                                              'release'       => @vars[:release],
@@ -809,26 +809,28 @@ EC2 Instance profile
               list.each do |obj|
                 @logger.debug "Inspect #{obj[:key]}"
                 delete = false
-                unless obj[:key].match(%r'#{key}$')
+                unless obj[:key].match(%r'#{key}$') # It is not INVENTORY.json
                   item = obj[:key].dup
-                  if item.match(%r'^#{@vars[:product]}')
+                  if item.match(%r'^#{@vars[:product]}') # Starts as ChefRepo/ for example
                     item.gsub!(%r'^#{@vars[:product]}/', '')
-                    matches = item.match(%r'^([^/]+)/')
+                    matches = item.match(%r'^([^/]+)/') # Next part should be variant i.e. SNAPSHOT
                     if matches
                       variant   = matches[1]
                       if variants.has_key?(variant)
                         varianth = variants[variant]
                         item.gsub!(%r'^#{variant}/', '')
-                        matches = item.match(%r'^([^/]+)/')
-                        if matches
-                          drawer = matches[1]
+                        #matches = item.match(%r'^([^/]+)/') # Match the drawer name ...
+                        drawer,item = File.split(item) # What remains is drawer name and artifact name
+                        #if matches
+                        if drawer and item
+                          # drawer = matches[1]
                           builds = varianth['builds'].select{ |bld|
                             bld['drawer'].eql?(drawer)
                           }
                           if builds.size > 0
-                            item.gsub!(%r'^#{drawer}/', '')
+                            # item.gsub!(%r'^#{drawer}/', '')
 
-                            if item.match(%r'^#{drawer}')
+                            if item.match(%r'^#{drawer.match('/') ? drawer.split('/')[0] : drawer}') # Artifact names which start with the drawer name ...
                               name = item.gsub(%r'\.(MANIFEST\.json|tar\.[bg]z2?|tgz|tbz2?|checksum)$', '')
                               ver = _getMatches(@vars, name, :version)
                               rel = _getMatches(@vars, name, :release)
@@ -915,25 +917,27 @@ EC2 Instance profile
 
             fileroom = {}
             list.each do |obj|
-              unless obj[:key].match(%r'#{key}$')
+              unless obj[:key].match(%r'#{key}$') # INVENTORY.json ?
                 item      = obj[:key].dup
-                if item.match(%r'^#{@vars[:product]}')
+                if item.match(%r'^#{@vars[:product]}') # ChefRepo/....
                   item.gsub!(%r'^#{@vars[:product]}/', '')
-                  matches = item.match(%r'^([^/]+)/')
+                  matches = item.match(%r'^([^/]+)/') # SNAPSHOT/...
                   if matches
                     variant   = matches[1]
                     fileroom[variant] ||= {}
                     cabinet = fileroom[variant]
                     item.gsub!(%r'^#{variant}/', '')
-                    matches = item.match(%r'^([^/]+)/')
-                    if matches
-                      drawer = matches[1]
-                      item.gsub!(%r'^#{drawer}/', '')
+                    #matches = item.match(%r'^([^/]+)/') # Match the drawer name ...
+                    drawer,item = File.split(item) # What remains is drawer name and artifact name
+                    #if matches
+                    if drawer and item
+                      # drawer = matches[1]
+                      # item.gsub!(%r'^#{drawer}/', '')
                       cabinet[drawer] ||= {}
                       tray = cabinet[drawer]
                       # tray['builds'] ||= {}
 
-                      if item.match(%r'^#{drawer}')
+                      if item.match(%r'^#{drawer.match('/') ? drawer.split('/')[0] : drawer}') # Artifacts which start with the drawer name
                         name = item.gsub(%r'\.(MANIFEST\.json|tar\.[bg]z2?|tgz|tbz2?|checksum)$', '')
                         ext  = item.gsub(%r'\.(tar\.[bg]z2?)$', '$1')
                         ext  = 'tar.bz2' if ext == item
