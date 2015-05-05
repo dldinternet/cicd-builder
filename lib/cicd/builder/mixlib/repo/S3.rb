@@ -438,7 +438,7 @@ EC2 Instance profile
 
             # Store the checksum
             artifacts << {
-                key:        "#{@vars[:project_name]}/#{@vars[:variant]}/#{@vars[:build_nam]}/#{@vars[:build_nmn]}.checksum",
+                key:        "#{key}.checksum",
                 data:       {:data => @vars[:build_sha]},
                 public_url: :checksum_url,
                 read_url:   :checksum_url,
