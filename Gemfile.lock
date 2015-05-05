@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    cicd-builder (0.9.58)
+    cicd-builder (0.9.59)
       artifactory (>= 2.2.1, < 2.3)
       awesome_print (>= 1.6, < 2.0)
       aws-sdk (>= 2.0, < 2.1)
