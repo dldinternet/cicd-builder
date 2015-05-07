@@ -285,7 +285,7 @@ module CiCd
             # Get a list of matching artifacts in this repository
             @logger.info "Artifactory gavc_search g=#{artifactory_org_path()},a=#{artifact_name},v=#{artifact_version},r=#{repo || artifactory_repo()}"
             @arti_search_result     = []
-            monitor(30, 'artifact_gavc_search'){
+            monitor(@vars[:upload_timer], 'artifact_gavc_search'){
               @arti_search_result = @client.artifact_gavc_search(group: artifactory_org_path(), name: artifact_name, version: "#{artifact_version}", repos: [repo || artifactory_repo()])
             }
             # noinspection RubyScope
@@ -309,7 +309,7 @@ module CiCd
             # Get a list of matching artifacts in this repository
             @logger.info "Artifactory latest_version g=#{artifactory_org_path()},a=#{artifact_name},r=#{repo || artifactory_repo()}"
             @arti_search_result     = []
-            monitor(30, 'artifact_latest_version'){
+            monitor(@vars[:upload_timer], 'artifact_latest_version'){
               @arti_search_result = ::Artifactory::Resource::Artifact.latest_version(client: @client, group: artifactory_org_path(), name: artifact_name, repos: [repo || artifactory_repo()])
             }
             # noinspection RubyScope
@@ -323,17 +323,20 @@ module CiCd
           end
         end
 
-        def monitor(limit,title='Progress')
+        def monitor(limit,title='Time consumed')
           raise 'Must have a block' unless block_given?
           thread = Thread.new(){
             yield
           }
-          progressbar = ::ProgressBar.create({title: title, progress_mark: '=', starting_at: 0, total: limit, remainder_mark: '.', throttle_rate: 0.5}) if @logger.info?
-          limit.times do
+          progressbar = ::ProgressBar.create({title: title, format: '%a <%B> %p%% %t', progress_mark: '=', starting_at: 0, total: limit, remainder_mark: '.'}) if @logger.info?
+          # progressbar = ::ProgressBar.create({title: title, format: '%a <%B> %p%% %t', progress_mark: '=', starting_at: 0, total: limit, length: limit, remainder_mark: '.', throttle_rate: 0.5}) if @logger.info?
+          #progressbar = ::ProgressBar.create({title: title, format: '%a %bᗧ%i %p%%', progress_mark: ' ', remainder_mark: '=', starting_at: 0, throttle_rate: 0.5}) if @logger.info?
+          limit.times do |i|
             res = thread.join(1)
             if @logger.info?
               progressbar.increment
-              progressbar.total = limit
+              # progressbar.total = limit
+              # progressbar.log i
             end
             unless thread.alive? #or thread.stop?
               puts '' if @logger.info?
@@ -353,13 +356,14 @@ module CiCd
                                 }
           artifact.size = data[:size]
           @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Start upload #{artifact_path} = #{data[:size]} bytes"
-          monitor(30, 'upload') {
+          monitor(@vars[:upload_timer], 'upload') {
             @arti_upload_result = artifact.upload(repo || artifactory_repo(), "#{artifact_path}", data[:properties] || {})
           }
+          raise "Failed to upload artifact for #{artifact_path}" unless @arti_upload_result
           @logger.info "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S %z')}] Uploaded: #{@arti_upload_result.attributes.select { |k, _| k != :client }.ai}"
           3.times{
             @arti_upload_checksum = false
-            monitor(30, 'upload_checksum') {
+            monitor(@vars[:upload_timer], 'upload_checksum') {
               begin
                 artifact.upload_checksum(repo || artifactory_repo(), "#{artifact_path}", :sha1, data[:sha1])
                 @arti_upload_checksum = true
@@ -373,7 +377,7 @@ module CiCd
           raise "Failed to upload SHA1 for #{artifact_path}" unless @arti_upload_checksum
           3.times{
             @arti_upload_checksum = false
-            monitor(30, 'upload_checksum') {
+            monitor(@vars[:upload_timer], 'upload_checksum') {
               begin
                 artifact.upload_checksum(repo || artifactory_repo(), "#{artifact_path}", :md5,  data[:md5])
                 @arti_upload_checksum = true

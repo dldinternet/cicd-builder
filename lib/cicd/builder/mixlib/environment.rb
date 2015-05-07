@@ -38,10 +38,11 @@ module CiCd
 
       @logger.info "Unused ENV vars: #{@default_options[:env_unused].ai}" if @default_options[:env_unused].size > 0
 
-			@vars               ||= {}
-			@vars[:release]     = 'latest'
-			@vars[:build_store] = '/tmp'
-			@vars[:variant]     = 'SNAPSHOT'
+			@vars                ||= {}
+			@vars[:release]      = 'latest'
+			@vars[:build_store]  = '/tmp'
+			@vars[:variant]      = 'SNAPSHOT'
+      @vars[:upload_timer] = ENV.has_key?('ARTIFACT_UPLOAD_TIMER') ? ENV['ARTIFACTORY_UPLOAD_TIMER'].to_i : 300
 
 			if ENV.has_key?('PROJECT_NAME')
         @vars[:product] =
