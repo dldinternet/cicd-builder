@@ -26,13 +26,18 @@ module CiCd
 				#raise Exception.new("Need these environment variables: #{missing}")
 				puts("Need these environment variables: #{missing.ai}")
         return 1
-			end
-			0
+      end
+      @default_options[:env_unused] = @default_options[:env_keys].select{|k| k !~ /^(WORKSPACE|JENKINS|BUILD_|JOB_|VERSION|RELEASE|VARIANT|BRANCH|GIT_|PROJECT_|REPO_)/}
+      @default_options[:env_unused] = @default_options[:env_unused].select{|k| k if ENV.has_key?(k) and ENV[k] != 'faked' }
+      0
 		end
 
 		# ---------------------------------------------------------------------------------------------------------------
 		def getVars()
       @logger.step CLASS+'::'+__method__.to_s
+
+      @logger.info "Unused ENV vars: #{@default_options[:env_unused].ai}" if @default_options[:env_unused].size > 0
+
 			@vars               ||= {}
 			@vars[:release]     = 'latest'
 			@vars[:build_store] = '/tmp'

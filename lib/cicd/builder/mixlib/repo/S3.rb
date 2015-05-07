@@ -45,6 +45,7 @@ EC2 Instance profile
 
         # ---------------------------------------------------------------------------------------------------------------
         def uploadToRepo(artifacts)
+          @logger.info CLASS+'::'+__method__.to_s
           s3 = getS3()
           artifacts.each{|art|
 
@@ -150,6 +151,7 @@ EC2 Instance profile
 
         # ---------------------------------------------------------------------------------------------------------------
         def takeInventory()
+          @logger.info CLASS+'::'+__method__.to_s
           varianth  = nil
           # Read and parse in JSON
           key, json, over = pullInventory()
@@ -245,6 +247,7 @@ EC2 Instance profile
         end
 
         def pushInventory(json_s, key)
+          @logger.info CLASS+'::'+__method__.to_s
           begin
             md5 = Digest::MD5.hexdigest(json_s)
             # [:'x-amz-meta-digest'] = "md5=#{md5}"

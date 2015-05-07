@@ -313,7 +313,7 @@ module CiCd
               @arti_search_result = ::Artifactory::Resource::Artifact.latest_version(client: @client, group: artifactory_org_path(), name: artifact_name, repos: [repo || artifactory_repo()])
             }
             # noinspection RubyScope
-            if @arti_search_result.size > 0
+            if @arti_search_result and @arti_search_result.size > 0
               @logger.info "\tresult: #{@arti_search_result}"
             end
             @arti_search_result
