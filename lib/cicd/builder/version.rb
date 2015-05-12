@@ -4,7 +4,7 @@ module CiCd
 		# file    = File.expand_path("#{File.dirname(__FILE__)}/../../../VERSION")
 		# lines   = File.readlines(file)
 		# version = lines[0]
-		version = '0.9.62'
+		version = '0.9.63'
 		VERSION = version unless const_defined?('VERSION')
 		major, minor, tiny = VERSION.split('.')
 		MAJOR   = major unless const_defined?('MAJOR')

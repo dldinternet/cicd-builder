@@ -209,14 +209,25 @@ module CiCd
             matched = matchArtifactoryObjects(artifact_path, data, objects)
             upload ||= (matched.size == 0)
           end
+          properties_matrix = {}
+          data.select{|k,_| not k.to_s.match(%r'^file')}.each do |k,v|
+            properties_matrix["product.#{k}"] = v
+          end
+          data[:properties] = properties_matrix.merge(@properties_matrix)
           if upload
-            properties_matrix = {}
-            data.select{|k,_| not k.to_s.eql?('file')}.each do |k,v|
-              properties_matrix["product.#{k}"] = v
-            end
-            data[:properties] = properties_matrix.merge(@properties_matrix)
             objects = uploadArtifact(artifact_module, artifact_version, artifact_path, data, args[:repo])
             matched = matchArtifactoryObjects(artifact_path, data, objects)
+            properties = matched.map{ |artifact|
+              artifact.properties
+            }
+            @logger.info "Matched artifacts properties: #{properties.ai}"
+            matched.each { |match|
+              artifact = ::Artifactory::Resource::Artifact.from_url(match.uri, client: @client)
+              unless artifact.uri =~ %r'#{data[:properties]['product.version']}/'
+                @logger.error "Artifact uploaded #{artifact_module}/#{artifact_version} to #{match.uri} does not contain #{data[:properties]['product.version']}/"
+                @vars[:return_code] = Errors::ARTIFACT_NOT_UPLOADED
+              end
+            }
           else
             @logger.info "Keep existing #{matched.map{|o| o.attributes[:uri]}.join("\t")}"
           end
@@ -238,13 +249,28 @@ module CiCd
             matched = matchArtifactoryObjects(artifact_path, data, copies)
             upload  = (matched.size == 0)
             if upload
+              copies = []
               objects.each do |artifact|
                 copied = copyArtifact(artifact_module, artifact_version, artifact_path, artifact, args[:repo])
                 unless copied.size > 0
                   @vars[:return_code] = Errors::ARTIFACT_NOT_COPIED
                   break
                 end
+                copies << copied
               end
+              copies.flatten!
+              matched = matchArtifactoryObjects(artifact_path, data, copies)
+              properties = matched.map{ |artifact|
+                artifact.properties
+              }
+              @logger.info "Matched artifacts properties: #{properties.ai}"
+              matched.each { |match|
+                artifact = ::Artifactory::Resource::Artifact.from_url(match.uri, client: @client)
+                unless artifact.uri =~ %r'#{data[:properties]['product.version']}-#{data[:properties]['product.build']}/'
+                  @logger.error "Artifact uploaded #{artifact_module}/#{artifact_version} to #{match.uri} does not contain #{data[:properties]['product.version']}-#{data[:properties]['product.version']}/"
+                  @vars[:return_code] = Errors::ARTIFACT_NOT_UPLOADED
+                end
+              }
             else
               @logger.info "Keep existing #{matched.map{|o| o.attributes[:uri]}.join("\t")}"
             end
