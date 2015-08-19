@@ -234,7 +234,8 @@ EC2 Instance profile
               'release'       => args['release'],
           }
           if args['artifacts']
-            filing['artifacts'] = args['artifacts'].map { |artifact| File.basename(artifact[:key]) }
+            # filing['artifacts'] = args['artifacts'].map { |artifact| File.basename(artifact[:key]) }
+            filing['artifacts'] = args['artifacts'].map { |artifact| artifact[:key].gsub(%r|^.*#{args['drawer']}/|, '') }
           end
           assembly = json['container']['assembly'] or raise("Expected an 'assembly'")
           if assembly['extension'] != args['build_ext']
